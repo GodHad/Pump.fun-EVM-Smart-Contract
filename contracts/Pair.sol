@@ -3,20 +3,16 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-
 import "./ERC20.sol";
 
 contract Pair is ReentrancyGuard {
-    receive() external payable {}
+    // Events for minting, burning, and swapping
+    event Mint(uint256 reserve0, uint256 reserve1, address indexed lp);
+    event Burn(uint256 reserve0, uint256 reserve1, address indexed lp);
+    event Swap(uint256 amount0In, uint256 amount0Out, uint256 amount1In, uint256 amount1Out);
+    event ETHTransferred(address indexed to, uint256 amount);
 
-    address private _factory;
-
-    address private _tokenA;
-
-    address private _tokenB;
-
-    address private lp;
-
+    // Structure to represent the liquidity pool
     struct Pool {
         uint256 reserve0;
         uint256 reserve1;
@@ -25,34 +21,44 @@ contract Pair is ReentrancyGuard {
         uint256 lastUpdated;
     }
 
+    // State variables
+    address private _factory;
+    address private _tokenA;
+    address private _tokenB;
+    address private lp;
+
     Pool private pool;
 
-    constructor(address factory_, address token0, address token1) {
+    // Constants
+    uint256 private constant MIN_LIQUIDITY = 1 ether; // Minimum liquidity in the pool
+    uint256 private constant FEE_RATE = 10;
+    uint256 private constant FEE_BASE = 1000;
+
+    // Constructor
+    constructor(address factory_, address tokenA_, address tokenB_) {
         require(factory_ != address(0), "Zero addresses are not allowed.");
-        require(token0 != address(0), "Zero addresses are not allowed.");
-        require(token1 != address(0), "Zero addresses are not allowed.");
+        require(tokenA_ != address(0), "Zero addresses are not allowed.");
+        require(tokenB_ != address(0), "Zero addresses are not allowed.");
 
         _factory = factory_;
-
-        _tokenA = token0;
-
-        _tokenB = token1;
+        _tokenA = tokenA_;
+        _tokenB = tokenB_;
     }
 
-    event Mint(uint256 reserve0, uint256 reserve1, address lp);
+    funs
 
-    event Burn(uint256 reserve0, uint256 reserve1, address lp);
+    // Mint liquidity to the pool
+    function mint(uint256 reserve0, uint256 reserve1, address _lp) external returns (bool) {
+        require(_lp != address(0), "Zero address is not allowed.");
+        require(reserve0 > 0 && reserve1 > 0, "Reserves must be positive.");
 
-    event Swap(uint256 amount0In, uint256 amount0Out, uint256 amount1In, uint256 amount1Out);
-
-    function mint(uint256 reserve0, uint256 reserve1, address _lp) public returns (bool) {
         lp = _lp;
-
+        
         pool = Pool({
             reserve0: reserve0,
             reserve1: reserve1,
-            _reserve1: MINIMUM_LIQUIDITY(),
-            k: reserve0 * MINIMUM_LIQUIDITY(),
+            _reserve1: MIN_LIQUIDITY,
+            k: reserve0 * MIN_LIQUIDITY,
             lastUpdated: block.timestamp
         });
 
@@ -61,15 +67,19 @@ contract Pair is ReentrancyGuard {
         return true;
     }
 
-    function swap(uint256 amount0In, uint256 amount0Out, uint256 amount1In, uint256 amount1Out) public returns (bool) {
-        uint256 _reserve0 = (pool.reserve0 + amount0In) - amount0Out;
-        uint256 _reserve1 = (pool.reserve1 + amount1In) - amount1Out;
-        uint256 reserve1_ = (pool._reserve1 + amount1In) - amount1Out;
+    // Swap tokens within the pool
+    function swap(uint256 amount0In, uint256 amount0Out, uint256 amount1In, uint256 amount1Out) external returns (bool) {
+        uint256 amountWithFee = applyFee(amount0In);
+        uint256 newReserve0 = (pool.reserve0 + amountWithFee) - amount0Out;
+        uint256 newReserve1 = (pool.reserve1 + amount1In) - amount1Out;
+        uint256 newReserve1_ = (pool._reserve1 + amount1In) - amount1Out;
+
+        require(newReserve0 * newReserve1 >= pool.k, "Invariant not maintained");
 
         pool = Pool({
-            reserve0: _reserve0,
-            reserve1: _reserve1,
-            _reserve1: reserve1_,
+            reserve0: newReserve0,
+            reserve1: newReserve1,
+            _reserve1: newReserve1_,
             k: pool.k,
             lastUpdated: block.timestamp
         });
@@ -79,18 +89,21 @@ contract Pair is ReentrancyGuard {
         return true;
     }
 
-    function burn(uint256 reserve0, uint256 reserve1, address _lp) public returns (bool) {
-        require(_lp != address(0), "Zero addresses are not allowed.");
-        require(lp == _lp, "Only Lp holders can call this function.");
+    // Burn liquidity from the pool
+    function burn(uint256 reserve0, uint256 reserve1, address _lp) external returns (bool) {
+        require(_lp != address(0), "Zero address is not allowed.");
+        require(lp == _lp, "Only LP holders can call this function.");
 
-        uint256 _reserve0 = pool.reserve0 - reserve0;
-        uint256 _reserve1 = pool.reserve1 - reserve1;
-        uint256 reserve1_ = pool._reserve1 - reserve1;
+        uint256 newReserve0 = pool.reserve0 - reserve0;
+        uint256 newReserve1 = pool.reserve1 - reserve1;
+        uint256 newReserve1_ = pool._reserve1 - reserve1;
+
+        require(newReserve0 * newReserve1 >= pool.k, "Invariant not maintained");
 
         pool = Pool({
-            reserve0: _reserve0,
-            reserve1: _reserve1,
-            _reserve1: reserve1_,
+            reserve0: newReserve0,
+            reserve1: newReserve1,
+            _reserve1: newReserve1_,
             k: pool.k,
             lastUpdated: block.timestamp
         });
@@ -100,68 +113,69 @@ contract Pair is ReentrancyGuard {
         return true;
     }
 
-    function _approval(address _user, address _token, uint256 amount) private returns (bool) {
-        require(_user != address(0), "Zero addresses are not allowed.");
-        require(_token != address(0), "Zero addresses are not allowed.");
+    // Approve a user's token transfer
+    function approval(address _user, address _token, uint256 amount) external nonReentrant returns (bool) {
+        require(_user != address(0), "Zero address is not allowed.");
+        require(_token != address(0), "Zero address is not allowed.");
 
         ERC20 token_ = ERC20(_token);
-
         token_.approve(_user, amount);
 
         return true;
     }
 
-    function approval(address _user, address _token, uint256 amount) external nonReentrant returns (bool) {
-        bool approved = _approval(_user, _token, amount);
+    // Transfer ETH to a specified address
+    function transferETH(address _address, uint256 amount) external returns (bool) {
+        require(_address != address(0), "Zero address is not allowed.");
+        require(address(this).balance >= amount, "Insufficient balance");
 
-        return approved;
+        (bool success, ) = payable(_address).call{value: amount}("");
+        require(success, "Transfer failed");
+        
+        emit ETHTransferred(_address, amount);
+        return success;
     }
 
-    function transferETH(address _address, uint256 amount) public returns (bool) {
-        require(_address != address(0), "Zero addresses are not allowed.");
-
-        (bool os, ) = payable(_address).call{value: amount}("");
-
-        return os;
-    }
-
-    function liquidityProvider() public view returns (address) {
+    // Getters for contract information
+    function liquidityProvider() external view returns (address) {
         return lp;
     }
 
-    function MINIMUM_LIQUIDITY() public pure returns (uint256) {
-        return 1 ether;
-    }
-
-    function factory() public view returns (address) {
+    function factory() external view returns (address) {
         return _factory;
     }
 
-    function tokenA() public view returns (address) {
+    function tokenA() external view returns (address) {
         return _tokenA;
     }
 
-    function tokenB() public view returns (address) {
+    function tokenB() external view returns (address) {
         return _tokenB;
     }
 
-    function getReserves() public view returns (uint256, uint256, uint256) {
+    function getReserves() external view returns (uint256, uint256, uint256) {
         return (pool.reserve0, pool.reserve1, pool._reserve1);
     }
 
-    function kLast() public view returns (uint256) {
+    function kLast() external view returns (uint256) {
         return pool.k;
     }
 
-    function priceALast() public view returns (uint256) {
+    function priceALast() external view returns (uint256) {
+        require(pool.reserve0 > 0, "Reserve0 is zero");
         return pool.reserve1 / pool.reserve0;
     }
 
-    function priceBLast() public view returns (uint256) {
+    function priceBLast() external view returns (uint256) {
+        require(pool.reserve1 > 0, "Reserve1 is zero");
         return pool.reserve0 / pool.reserve1;
     }
 
-    function balance() public view returns (uint256) {
+    function balance() external view returns (uint256) {
         return address(this).balance;
+    }
+
+    function MINIMUM_LIQUIDITY() external pure returns (uint256) {
+        return MIN_LIQUIDITY;
     }
 }

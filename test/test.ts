@@ -16,7 +16,7 @@ describe("Test Pump Fun", function () {
     name: "Test Token",
     symbol: "TST",
     decimals: 18,
-    feeRecipient: "0x044421aAbF1c584CD594F9C10B0BbC98546CF8bc",
+    feeRecipient: "0xD6437Dc6Cc7369E9Fd7444d1618E21fffAD51A75",
     feeAmount: 1000000000000000n,
     feeBasisPoint: 100n,
     initialVirtualTokenReserves: 1000000000000000000000000000n,

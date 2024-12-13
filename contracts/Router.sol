@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-
 import "./Factory.sol";
 import "./Pair.sol";
 import "./ERC20.sol";
@@ -12,17 +10,15 @@ contract Router is ReentrancyGuard {
     using SafeMath for uint256;
 
     address private _factory;
-
     address private _WETH;
 
     uint public referralFee;
-    
+
     constructor(address factory_, address weth, uint refFee) {
         require(factory_ != address(0), "Zero addresses are not allowed.");
         require(weth != address(0), "Zero addresses are not allowed.");
 
         _factory = factory_;
-
         _WETH = weth;
 
         require(refFee <= 5, "Referral Fee cannot exceed 5%.");
@@ -38,41 +34,35 @@ contract Router is ReentrancyGuard {
         return _WETH;
     }
 
+    // Transfer ETH to a specific address
     function transferETH(address _address, uint256 amount) private returns (bool) {
         require(_address != address(0), "Zero addresses are not allowed.");
 
         (bool os, ) = payable(_address).call{value: amount}("");
-
         return os;
     }
 
+    // Get amounts out after swapping
     function _getAmountsOut(address token, address weth, uint256 amountIn) private view returns (uint256 _amountOut) {
         require(token != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-
         address pair = factory_.getPair(token, _WETH);
-
         Pair _pair = Pair(payable(pair));
 
-        (uint256 reserveA, ,uint256 _reserveB) = _pair.getReserves();
-
+        (uint256 reserveA, , uint256 reserveB) = _pair.getReserves();
         uint256 k = _pair.kLast();
 
         uint256 amountOut;
 
-        if(weth == _WETH) {
-            uint256 newReserveB = _reserveB.add(amountIn);
-
-            uint256 newReserveA = k.div(newReserveB, "Division failed");
-
-            amountOut = reserveA.sub(newReserveA, "Subtraction failed.");
+        if (weth == _WETH) {
+            uint256 newReserveB = reserveB.add(amountIn);
+            uint256 newReserveA = k.div(newReserveB);
+            amountOut = reserveA.sub(newReserveA);
         } else {
             uint256 newReserveA = reserveA.add(amountIn);
-
-            uint256 newReserveB = k.div(newReserveA, "Division failed");
-
-            amountOut = _reserveB.sub(newReserveB, "Subtraction failed.");
+            uint256 newReserveB = k.div(newReserveA);
+            amountOut = reserveB.sub(newReserveB);
         }
 
         return amountOut;
@@ -80,17 +70,15 @@ contract Router is ReentrancyGuard {
 
     function getAmountsOut(address token, address weth, uint256 amountIn) external nonReentrant returns (uint256 _amountOut) {
         uint256 amountOut = _getAmountsOut(token, weth, amountIn);
-
         return amountOut;
     }
 
+    // Add liquidity ETH
     function _addLiquidityETH(address token, uint256 amountToken, uint256 amountETH) private returns (uint256, uint256) {
         require(token != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-
         address pair = factory_.getPair(token, _WETH);
-
         Pair _pair = Pair(payable(pair));
 
         ERC20 token_ = ERC20(token);
@@ -100,7 +88,7 @@ contract Router is ReentrancyGuard {
 
         bool os1 = token_.transferFrom(msg.sender, pair, amountToken);
         require(os1, "Transfer of token to pair failed.");
-        
+
         _pair.mint(amountToken, amountETH, msg.sender);
 
         return (amountToken, amountETH);
@@ -110,37 +98,33 @@ contract Router is ReentrancyGuard {
         uint256 amountETH = msg.value;
 
         (uint256 amount0, uint256 amount1) = _addLiquidityETH(token, amountToken, amountETH);
-        
         return (amount0, amount1);
     }
 
+    // Remove liquidity ETH
     function _removeLiquidityETH(address token, uint256 liquidity, address to) private returns (uint256, uint256) {
         require(token != address(0), "Zero addresses are not allowed.");
         require(to != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-
         address pair = factory_.getPair(token, _WETH);
-
         Pair _pair = Pair(payable(pair));
 
         (uint256 reserveA, , ) = _pair.getReserves();
-
         ERC20 token_ = ERC20(token);
 
-        uint256 amountETH  = (liquidity * _pair.balance()) / 100;
-
+        uint256 amountETH = (liquidity * _pair.balance()) / 100;
         uint256 amountToken = (liquidity * reserveA) / 100;
 
         bool approved = _pair.approval(address(this), token, amountToken);
-        require(approved);
+        require(approved, "Approval failed");
 
         bool os = _pair.transferETH(to, amountETH);
         require(os, "Transfer of ETH to caller failed.");
 
         bool os1 = token_.transferFrom(pair, to, amountToken);
         require(os1, "Transfer of token to caller failed.");
-        
+
         _pair.burn(amountToken, amountETH, msg.sender);
 
         return (amountToken, amountETH);
@@ -148,19 +132,17 @@ contract Router is ReentrancyGuard {
 
     function removeLiquidityETH(address token, uint256 liquidity, address to) external nonReentrant returns (uint256, uint256) {
         (uint256 amountToken, uint256 amountETH) = _removeLiquidityETH(token, liquidity, to);
-
         return (amountToken, amountETH);
     }
 
+    // Swap tokens for ETH
     function swapTokensForETH(uint256 amountIn, address token, address to, address referree) public nonReentrant returns (uint256, uint256) {
         require(token != address(0), "Zero addresses are not allowed.");
         require(to != address(0), "Zero addresses are not allowed.");
         require(referree != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-
         address pair = factory_.getPair(token, _WETH);
-
         Pair _pair = Pair(payable(pair));
 
         ERC20 token_ = ERC20(token);
@@ -176,7 +158,7 @@ contract Router is ReentrancyGuard {
         uint256 _amount;
         uint256 amount;
 
-        if(referree != address(0)) {
+        if (referree != address(0)) {
             _amount = (referralFee * amountOut) / 100;
             amount = amountOut - (txFee + _amount);
 
@@ -199,6 +181,7 @@ contract Router is ReentrancyGuard {
         return (amountIn, amount);
     }
 
+    // Swap ETH for tokens
     function swapETHForTokens(address token, address to, address referree) public payable nonReentrant returns (uint256, uint256) {
         require(token != address(0), "Zero addresses are not allowed.");
         require(to != address(0), "Zero addresses are not allowed.");
@@ -207,9 +190,7 @@ contract Router is ReentrancyGuard {
         uint256 amountIn = msg.value;
 
         Factory factory_ = Factory(_factory);
-
         address pair = factory_.getPair(token, _WETH);
-
         Pair _pair = Pair(payable(pair));
 
         ERC20 token_ = ERC20(token);
@@ -225,7 +206,7 @@ contract Router is ReentrancyGuard {
         uint256 _amount;
         uint256 amount;
 
-        if(referree != address(0)) {
+        if (referree != address(0)) {
             _amount = (referralFee * amountIn) / 100;
             amount = amountIn - (txFee + _amount);
 
@@ -245,7 +226,7 @@ contract Router is ReentrancyGuard {
 
         bool os3 = token_.transferFrom(pair, to, amountOut);
         require(os3, "Transfer of token to pair failed.");
-    
+
         _pair.swap(0, amountOut, amount, 0);
 
         return (amount, amountOut);

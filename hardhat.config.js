@@ -6,7 +6,6 @@ const {
   PRIVATE_KEY,
   SEPOLIA_API_URL,
   MAINNET_API_URL,
-  ETHERSCAN_API_KEY,
   BASE_API_KEY
 } = process.env;
 
@@ -22,9 +21,15 @@ module.exports = {
       viaIR: true
     }
   },
-  defaultNetwork: "sepolia",
+  defaultNetwork: "localhost",
   networks: {
-    hardhat: {},
+    localhost: {
+      url: "http://127.0.0.1:8545",
+      accounts: ['0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80']
+    },
+    hardhat: {
+      chainId: 1337
+    },
     sepolia: {
       url: `${SEPOLIA_API_URL}`,
       accounts: [`0x${PRIVATE__KEY}`]
