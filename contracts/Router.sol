@@ -1,4 +1,3 @@
-// Router.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
@@ -8,8 +7,6 @@ import "./Pair.sol";
 import "./ERC20.sol";
 
 contract Router is ReentrancyGuard {
-    using SafeMath for uint256;
-
     address private _factory;
     address private _WVLX; // Velas Wrapped Native Token 
 
@@ -45,8 +42,8 @@ contract Router is ReentrancyGuard {
         require(token != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-        address pair = factory_.getPair(token, _WVLX); 
-        Pair _pair = Pair(payable(pair));
+        address pairAddress = factory_.getPair(token, _WVLX); 
+        Pair _pair = Pair(payable(pairAddress));
 
         (uint256 reserveA, , uint256 reserveB) = _pair.getReserves();
         uint256 k = _pair.kLast();
@@ -54,14 +51,20 @@ contract Router is ReentrancyGuard {
         uint256 amountOut;
 
         if (weth == _WVLX) { 
-            uint256 newReserveB = reserveB.add(amountIn);
-            uint256 newReserveA = k.div(newReserveB);
-            amountOut = reserveA.sub(newReserveA);
+            unchecked { 
+                uint256 newReserveB = reserveB + amountIn;
+                uint256 newReserveA = k / newReserveB;
+                amountOut = reserveA - newReserveA;
+            }
         } else {
-            uint256 newReserveA = reserveA.add(amountIn);
-            uint256 newReserveB = k.div(newReserveA);
-            amountOut = reserveB.sub(newReserveB);
+            unchecked { 
+                uint256 newReserveA = reserveA + amountIn;
+                uint256 newReserveB = k / newReserveA;
+                amountOut = reserveB - newReserveB;
+            }
         }
+
+        amountOut = amountOut * 95 / 100; 
 
         return amountOut;
     }
@@ -71,22 +74,44 @@ contract Router is ReentrancyGuard {
         return amountOut;
     }
 
-    function _addLiquidityETH(address token, uint256 amountToken, uint256 amountETH) private returns (uint256, uint256) {
+    function _addLiquidityETH(
+        address token, 
+        uint256 amountTokenDesired, 
+        uint256 amountETHDesired
+    ) private returns (uint256 amountToken, uint256 amountETH) {
         require(token != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-        address pair = factory_.getPair(token, _WVLX); 
-        Pair _pair = Pair(payable(pair));
+        address pairAddress = factory_.getPair(token, _WVLX); 
+        Pair pair = Pair(payable(pairAddress));
 
         ERC20 token_ = ERC20(token);
 
-        bool os = transferETH(pair, amountETH);
-        require(os, "Transfer of ETH to pair failed.");
+        require(
+            transferETH(pairAddress, amountETHDesired) && 
+            token_.transferFrom(msg.sender, pairAddress, amountTokenDesired), 
+            "Transfer failed"
+        ); 
 
-        bool os1 = token_.transferFrom(msg.sender, pair, amountToken);
-        require(os1, "Transfer of token to pair failed.");
+        // Calculate LP tokens to mint
+        uint256 totalSupply = IERC20(pairAddress).totalSupply(); 
+        if (totalSupply == 0) {
+            amountToken = amountTokenDesired;
+            amountETH = amountETHDesired;
+        } else {
+            uint256 reserve0 = pair.reserve0();
+            uint256 reserve1 = pair.reserve1();
+            uint256 liquidity = (amountTokenDesired * reserve1) / reserve0;
+            if (liquidity < amountETHDesired) {
+                amountETH = liquidity;
+                amountToken = amountTokenDesired;
+            } else {
+                amountToken = (amountETHDesired * reserve0) / reserve1;
+                amountETH = amountETHDesired;
+            }
+        }
 
-        _pair.mint(amountToken, amountETH, msg.sender);
+        pair.mint(amountToken, msg.sender); 
 
         return (amountToken, amountETH);
     }
@@ -102,25 +127,25 @@ contract Router is ReentrancyGuard {
         require(to != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-        address pair = factory_.getPair(token, _WVLX);
-        Pair _pair = Pair(payable(pair));
+        address pairAddress = factory_.getPair(token, _WVLX);
+        Pair _pair = Pair(payable(pairAddress));
 
         (uint256 reserveA, , ) = _pair.getReserves();
         ERC20 token_ = ERC20(token);
 
-        uint256 amountETH = (liquidity * _pair.balance()) / 100;
-        uint256 amountToken = (liquidity * reserveA) / 100;
+        uint256 amountETH = (liquidity * _pair.balance()) / IERC20(pairAddress).totalSupply(); 
+        uint256 amountToken = (liquidity * reserveA) / IERC20(pairAddress).totalSupply(); 
 
         bool approved = _pair.approval(address(this), token, amountToken);
         require(approved, "Approval failed");
 
-        bool os = _pair.transferETH(to, amountETH);
-        require(os, "Transfer of ETH to caller failed.");
+        require(
+            _pair.transferETH(to, amountETH) &&
+            token_.transferFrom(pairAddress, to, amountToken),
+            "Transfer failed"
+        );
 
-        bool os1 = token_.transferFrom(pair, to, amountToken);
-        require(os1, "Transfer of token to caller failed.");
-
-        _pair.burn(amountToken, amountETH, msg.sender);
+        _pair.burn(amountETH, amountToken, msg.sender);
 
         return (amountToken, amountETH);
     }
@@ -136,39 +161,39 @@ contract Router is ReentrancyGuard {
         require(referree != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-        address pair = factory_.getPair(token, _WVLX); 
-        Pair _pair = Pair(payable(pair));
+        address pairAddress = factory_.getPair(token, _WVLX); 
+        Pair _pair = Pair(payable(pairAddress));
 
         ERC20 token_ = ERC20(token);
 
         uint256 amountOut = _getAmountsOut(token, address(0), amountIn);
 
-        bool os = token_.transferFrom(to, pair, amountIn);
-        require(os, "Transfer of token to pair failed");
+        require(token_.transferFrom(to, pairAddress, amountIn), "Transfer of token to pair failed");
 
         uint fee = factory_.txFee();
-        uint256 txFee = (fee * amountOut) / 100;
 
-        uint256 _amount;
-        uint256 amount;
+        unchecked { 
+            uint256 txFee = (fee * amountOut) / 100;
+            uint256 _amount;
+            uint256 amount;
 
-        if (referree != address(0)) {
-            _amount = (referralFee * amountOut) / 100;
-            amount = amountOut - (txFee + _amount);
+            if (referree != address(0)) {
+                _amount = (referralFee * amountOut) / 100;
+                amount = amountOut - (txFee + _amount);
 
-            bool os1 = _pair.transferETH(referree, _amount);
-            require(os1, "Transfer of ETH to referree failed.");
-        } else {
-            amount = amountOut - txFee;
+                require(_pair.transferETH(referree, _amount), "Transfer of ETH to referree failed.");
+            } else {
+                amount = amountOut - txFee;
+            }
+
+            address feeTo = factory_.feeTo();
+
+            require(
+                _pair.transferETH(to, amount) &&
+                _pair.transferETH(feeTo, txFee),
+                "ETH transfer failed"
+            ); 
         }
-
-        address feeTo = factory_.feeTo();
-
-        bool os2 = _pair.transferETH(to, amount);
-        require(os2, "Transfer of ETH to user failed.");
-
-        bool os3 = _pair.transferETH(feeTo, txFee);
-        require(os3, "Transfer of ETH to fee address failed.");
 
         _pair.swap(amountIn, 0, 0, amount);
 
@@ -183,8 +208,8 @@ contract Router is ReentrancyGuard {
         uint256 amountIn = msg.value;
 
         Factory factory_ = Factory(_factory);
-        address pair = factory_.getPair(token, _WVLX); 
-        Pair _pair = Pair(payable(pair));
+        address pairAddress = factory_.getPair(token, _WVLX); 
+        Pair _pair = Pair(payable(pairAddress));
 
         ERC20 token_ = ERC20(token);
 
@@ -194,31 +219,31 @@ contract Router is ReentrancyGuard {
         require(approved, "Not Approved.");
 
         uint fee = factory_.txFee();
-        uint256 txFee = (fee * amountIn) / 100;
 
-        uint256 _amount;
-        uint256 amount;
+        unchecked {
+            uint256 txFee = (fee * amountIn) / 100;
+            uint256 _amount;
+            uint256 amount;
 
-        if (referree != address(0)) {
-            _amount = (referralFee * amountIn) / 100;
-            amount = amountIn - (txFee + _amount);
+            if (referree != address(0)) {
+                _amount = (referralFee * amountIn) / 100;
+                amount = amountIn - (txFee + _amount);
 
-            bool os = transferETH(referree, _amount);
-            require(os, "Transfer of ETH to referree failed.");
-        } else {
-            amount = amountIn - txFee;
+                require(transferETH(referree, _amount), "Transfer of ETH to referree failed.");
+            } else {
+                amount = amountIn - txFee;
+            }
+
+            address feeTo = factory_.feeTo();
+
+            require(
+                transferETH(pairAddress, amount) &&
+                transferETH(feeTo, txFee),
+                "ETH transfer failed"
+            );
         }
 
-        address feeTo = factory_.feeTo();
-
-        bool os1 = transferETH(pair, amount);
-        require(os1, "Transfer of ETH to pair failed.");
-
-        bool os2 = transferETH(feeTo, txFee);
-        require(os2, "Transfer of ETH to fee address failed.");
-
-        bool os3 = token_.transferFrom(pair, to, amountOut);
-        require(os3, "Transfer of token to pair failed.");
+        require(token_.transferFrom(pairAddress, to, amountOut), "Transfer of token to pair failed.");
 
         _pair.swap(0, amountOut, amount, 0);
 

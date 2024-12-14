@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import "./Pair.sol";
+import "./Pair.sol"; 
 
 contract Factory is ReentrancyGuard {
     address private owner;
@@ -28,13 +28,15 @@ contract Factory is ReentrancyGuard {
         require(tokenA != address(0), "Zero addresses are not allowed.");
         require(tokenB != address(0), "Zero addresses are not allowed.");
 
-        Pair _pair = new Pair(address(this), tokenA, tokenB);
-        pair[tokenA][tokenB] = address(_pair);
-        pair[tokenB][tokenA] = address(_pair);
-        pairs.push(address(_pair));
-        uint n = pairs.length;
-        emit PairCreated(tokenA, tokenB, address(_pair), n);
-        return address(_pair);
+        unchecked { 
+            Pair _pair = new Pair(address(this), tokenA, tokenB);
+            pair[tokenA][tokenB] = address(_pair);
+            pair[tokenB][tokenA] = address(_pair);
+            pairs.push(address(_pair));
+            uint n = pairs.length; 
+            emit PairCreated(tokenA, tokenB, address(_pair), n);
+            return address(_pair);
+        }
     }
 
     function createPair(address tokenA, address tokenB) external nonReentrant returns (address) {

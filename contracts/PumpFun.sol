@@ -46,22 +46,17 @@ contract PumpFun is ReentrancyGuard {
     uint256 private constant mcap = 100_000 ether;
     IUniswapV2Router02 private uniswapV2Router;
 
-    struct Profile {
-        address user;
-        Token[] tokens;
-    }
-
     struct Token {
         address creator;
         address token;
         address pair;
         Data data;
-        string description;
-        string image;
-        string twitter;
-        string telegram;
-        string youtube;
-        string website;
+        string description; 
+        string image;       
+        string twitter;    
+        string telegram;     
+        string youtube;      
+        string website;     
         bool trading;
         bool tradingOnUniswap;
     }
@@ -81,8 +76,6 @@ contract PumpFun is ReentrancyGuard {
         uint256 lastUpdated;
     }
 
-    mapping(address => Profile) public profile;
-    Profile[] public profiles;
     mapping(address => Token) public token;
     Token[] public tokens;
 
@@ -94,6 +87,8 @@ contract PumpFun is ReentrancyGuard {
     uint256 private constant MARKET_CAP_THRESHOLD = 69000 * 10**18; // $69k in VLX
     uint256 private constant CREATOR_REWARD = 0.5 ether; // 0.5 VLX
     uint256 private constant DEX_LISTING_FEE = 6 * 10**18; // 6 VLX
+    uint256 private constant VIRTUAL_SOL_RESERVES = 30 * 10**18; 
+    uint256 private constant VIRTUAL_TOKEN_RESERVES = 1073000191 * 10**18; 
 
     constructor(address factory_, address router_, address fee_to, uint256 _fee) {
         owner = msg.sender;
@@ -113,25 +108,6 @@ contract PumpFun is ReentrancyGuard {
         _;
     }
 
-    function createUserProfile(address _user) private returns (bool) {
-        require(_user != address(0), "Zero addresses are not allowed.");
-        Token[] memory _tokens;
-        Profile memory _profile = Profile({ user: _user, tokens: _tokens });
-        profile[_user] = _profile;
-        profiles.push(_profile);
-        return true;
-    }
-
-    function checkIfProfileExists(address _user) private view returns (bool) {
-        require(_user != address(0), "Zero addresses are not allowed.");
-        for(uint i = 0; i < profiles.length; i++) {
-            if(profiles[i].user == _user) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     function _approval(address _user, address _token, uint256 amount) private returns (bool) {
         require(_user != address(0), "Zero addresses are not allowed.");
         require(_token != address(0), "Zero addresses are not allowed.");
@@ -142,15 +118,6 @@ contract PumpFun is ReentrancyGuard {
 
     function approval(address _user, address _token, uint256 amount) external nonReentrant returns (bool) {
         return _approval(_user, _token, amount);
-    }
-
-    function launchFee() public view returns (uint256) {
-        return fee;
-    }
-
-    function updateLaunchFee(uint256 _fee) public returns (uint256) {
-        fee = _fee;
-        return _fee;
     }
 
     function liquidityFee() public pure returns (uint256) {
@@ -174,12 +141,6 @@ contract PumpFun is ReentrancyGuard {
         return mcap;
     }
 
-    function getUserTokens() public view returns (Token[] memory) {
-        require(checkIfProfileExists(msg.sender), "User Profile does not exist.");
-        Profile memory _profile = profile[msg.sender];
-        return _profile.tokens;
-    }
-
     function getTokens() public view returns (Token[] memory) {
         return tokens;
     }
@@ -200,10 +161,12 @@ contract PumpFun is ReentrancyGuard {
         address _pair = factory.createPair(address(_token), weth);
         Pair pair_ = Pair(payable(_pair));
 
-        uint256 platformFee = msg.value / 100; 
-        uint256 remainingAmount = msg.value - platformFee;
+        unchecked { 
+            uint256 platformFee = msg.value / 100; 
+            uint256 remainingAmount = msg.value - platformFee;
+        }
 
-        uint256 initialTokens = calculateTokenAmount(remainingAmount); 
+        uint256 initialTokens = pair_.calculateTokenAmount(remainingAmount); 
         ERC20(_token).mint(msg.sender, initialTokens);
 
         Data memory _data = Data({
@@ -211,13 +174,13 @@ contract PumpFun is ReentrancyGuard {
             name: _name,
             ticker: _ticker,
             supply: _supply * 10 ** _token.decimals(),
-            price: (_supply * 10 ** _token.decimals()) / pair_.MINIMUM_LIQUIDITY(),
+            price: pair_.calculateVLXAmount(10 ** _token.decimals()), 
             marketCap: pair_.MINIMUM_LIQUIDITY(),
-            liquidity: 0, // Initially 0, will be updated later
+            liquidity: 0, 
             _liquidity: pair_.MINIMUM_LIQUIDITY() * 2,
             volume: 0,
             volume24H: 0,
-            prevPrice: (_supply * 10 ** _token.decimals()) / pair_.MINIMUM_LIQUIDITY(),
+            prevPrice: pair_.calculateVLXAmount(10 ** _token.decimals()), 
             lastUpdated: block.timestamp
         });
 
@@ -239,18 +202,6 @@ contract PumpFun is ReentrancyGuard {
         token[address(_token)] = token_;
         tokens.push(token_);
 
-        bool exists = checkIfProfileExists(msg.sender);
-        if(exists) {
-            Profile storage _profile = profile[msg.sender];
-            _profile.tokens.push(token_);
-        } else {
-            bool created = createUserProfile(msg.sender);
-            if(created) {
-                Profile storage _profile = profile[msg.sender];
-                _profile.tokens.push(token_);
-            }
-        }
-
         (bool feeTransferSuccess, ) = payable(_feeTo).call{value: platformFee}("");
         require(feeTransferSuccess, "Fee transfer failed");
 
@@ -269,17 +220,18 @@ contract PumpFun is ReentrancyGuard {
         (uint256 reserveA, uint256 reserveB , uint256 _reserveB) = pair.getReserves();
         (uint256 amount0In, uint256 amount1Out) = router.swapTokensForETH(amountIn, tk, to, referree);
 
-        uint256 newReserveA = reserveA + amount0In;
-        uint256 newReserveB = reserveB - amount1Out;
-        uint256 _newReserveB = _reserveB - amount1Out;
-        uint256 duration = block.timestamp - token[tk].data.lastUpdated;
-
-        uint256 _liquidity = _newReserveB * 2;
-        uint256 liquidity = newReserveB * 2;
-        uint256 mCap = (token[tk].data.supply * _newReserveB) / newReserveA;
-        uint256 price = newReserveA / _newReserveB;
-        uint256 volume = duration > 86400 ? amount1Out : token[tk].data.volume24H + amount1Out;
-        uint256 _price = token[tk].data.prevPrice / amount1Out;
+        unchecked { 
+            uint256 newReserveA = reserveA + amount0In;
+            uint256 newReserveB = reserveB - amount1Out;
+            uint256 _newReserveB = _reserveB - amount1Out;
+            uint256 duration = block.timestamp - token[tk].data.lastUpdated;
+            uint256 _liquidity = _newReserveB * 2;
+            uint256 liquidity = newReserveB * 2;
+            uint256 mCap = (token[tk].data.supply * _newReserveB) / newReserveA;
+            uint256 price = newReserveA / _newReserveB;
+            uint256 volume = duration > 86400 ? amount1Out : token[tk].data.volume24H + amount1Out;
+            uint256 _price = pair.calculateVLXAmount(amount1Out); 
+        }
 
         token[tk].data = Data({
             token: tk,
@@ -317,10 +269,12 @@ contract PumpFun is ReentrancyGuard {
                 amountVLX, 
                 amountToken, 
                 currentToken.creator, 
-                block.timestampac
+                block.timestamp 
             );
 
-            uint256 burnAmount = amountToken / 10; 
+            unchecked {  
+                uint256 burnAmount = amountToken / 10; 
+            }
             ERC20(currentToken.token).burnTokens(burnAmount);
 
             (bool rewardTransferSuccess, ) = payable(currentToken.creator).call{value: CREATOR_REWARD}("");
@@ -328,7 +282,7 @@ contract PumpFun is ReentrancyGuard {
         }
     }
 
-    function calculateTokenAmount(uint256 amountVLX) private pure returns (uint256) {
+    function calculateTokenAmount(uint256 amountVLX) private view returns (uint256) {
         uint256 newReserve0 = VIRTUAL_SOL_RESERVES + amountVLX;
         uint256 newReserve1 = VIRTUAL_TOKEN_RESERVES - (VIRTUAL_SOL_RESERVES * VIRTUAL_TOKEN_RESERVES) / newReserve0;
         return newReserve1;

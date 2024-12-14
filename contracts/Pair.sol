@@ -21,7 +21,7 @@ contract Pair is ReentrancyGuard {
     uint256 private constant FEE_BASE = 1000;
     uint256 private constant VIRTUAL_SOL_RESERVES = 30 * 10**18; 
     uint256 private constant VIRTUAL_TOKEN_RESERVES = 1073000191 * 10**18; 
-    uint256 private constant MAX_TOTAL_SUPPLY = 10**9 * 10**6; 
+    uint256 public kLast; // Reserves product constant
 
     constructor(address factory_, address tokenA_, address tokenB_) {
         require(factory_ != address(0), "Zero addresses are not allowed.");
@@ -33,15 +33,18 @@ contract Pair is ReentrancyGuard {
         _tokenB = tokenB_;
     }
 
+    // This function should only be callable by the Router contract
     function mint(uint256 amountVLX, address _lp) external returns (bool) {
+        require(msg.sender == Router(Factory(_factory).feeTo()), "Only the router can call this function.");
         require(_lp != address(0), "Zero address is not allowed.");
-        require(amountVLX > 0, "Amount must be positive.");
 
         lp = _lp;
 
         uint256 tokenAmount = calculateTokenAmount(amountVLX);
 
         ERC20(_tokenB).mint(_lp, tokenAmount);
+
+        _update(reserve0(), reserve1()); 
 
         emit Mint(amountVLX, tokenAmount, _lp);
 
@@ -50,6 +53,7 @@ contract Pair is ReentrancyGuard {
 
     function swap(uint256 amount0In, uint256 amount0Out, uint256 amount1In, uint256 amount1Out) external returns (bool) {
         require(amount0In > 0 || amount1In > 0, "Insufficient input amount");
+        require(msg.sender == Router(Factory(_factory).feeTo()), "Only the router can call this function.");
 
         if (amount0In > 0) {
             uint256 amountWithFee = applyFee(amount0In);
@@ -64,14 +68,21 @@ contract Pair is ReentrancyGuard {
             ERC20(_tokenA).transfer(msg.sender, vlxAmount);
         }
 
+        _update(reserve0(), reserve1());
+
         emit Swap(amount0In, amount0Out, amount1In, amount1Out);
         return true;
     }
 
-    function burn(uint256 reserve0, uint256 reserve1, address _lp) external returns (bool) {
+    function burn(uint256 amountVLX, uint256 amountToken, address _lp) external returns (bool) {
         require(_lp != address(0), "Zero address is not allowed.");
         require(lp == _lp, "Only LP holders can call this function.");
-        emit Burn(reserve0, reserve1, _lp);
+
+        // Add any necessary logic for burning LP tokens and transferring 
+        // the underlying tokens (amountVLX and amountToken) to the user (_lp)
+        // ...
+
+        emit Burn(amountVLX, amountToken, _lp);
         return true;
     }
 
@@ -116,20 +127,10 @@ contract Pair is ReentrancyGuard {
         return IERC20(_tokenB).balanceOf(address(this));
     }
 
-    function kLast() external pure returns (uint256) {
-        return 0; 
-    }
-
-    function priceALast() external view returns (uint256) {
-        uint256 res0 = reserve0();
-        require(res0 > 0, "Reserve0 is zero");
-        return reserve1() / res0;
-    }
-
-    function priceBLast() external view returns (uint256) {
-        uint256 res1 = reserve1();
-        require(res1 > 0, "Reserve1 is zero");
-        return reserve0() / res1;
+    function getReserves() public view returns (uint256 _reserve0, uint256 _kLast, uint256 _reserve1) {
+        _reserve0 = reserve0();
+        _reserve1 = reserve1();
+        _kLast = kLast; 
     }
 
     function balance() external view returns (uint256) {
@@ -141,18 +142,24 @@ contract Pair is ReentrancyGuard {
     }
 
     function applyFee(uint256 amount) private pure returns (uint256) {
-        return (amount * (FEE_BASE - FEE_RATE)) / FEE_BASE;
+        return amount * (FEE_BASE - FEE_RATE) / FEE_BASE; 
     }
 
+    // Updated to implement the PumpFun bonding curve formula
     function calculateTokenAmount(uint256 amountVLX) private view returns (uint256) {
         uint256 newReserve0 = VIRTUAL_SOL_RESERVES + amountVLX + reserve0();
         uint256 newReserve1 = VIRTUAL_TOKEN_RESERVES - (VIRTUAL_SOL_RESERVES * VIRTUAL_TOKEN_RESERVES) / newReserve0;
         return reserve1() - newReserve1; 
     }
 
+    // Updated to implement the inverse of the PumpFun bonding curve formula
     function calculateVLXAmount(uint256 amountTokens) private view returns (uint256) {
         uint256 newReserve1 = VIRTUAL_TOKEN_RESERVES - amountTokens + reserve1();
         uint256 newReserve0 = (VIRTUAL_SOL_RESERVES * VIRTUAL_TOKEN_RESERVES) / newReserve1 - VIRTUAL_SOL_RESERVES;
         return newReserve0 - reserve0();
+    }
+
+    function _update(uint balance0, uint balance1) private {
+        kLast = balance0 * balance1; 
     }
 }

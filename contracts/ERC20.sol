@@ -15,47 +15,10 @@ interface IERC20 {
     function approve(address spender, uint256 amount) external returns (bool);
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
     function mint(address account, uint256 amount) external;
-    function burnTokens(uint256 amount) external; 
+    function burnTokens(uint256 amount) external;
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
-}
-
-library SafeMath {
-    function add(uint256 a, uint256 b) internal pure returns (uint256) {
-        uint256 c = a + b;
-        require(c >= a, "SafeMath: addition overflow");
-        return c;
-    }
-
-    function sub(uint256 a, uint256 b) internal pure returns (uint256) {
-        return sub(a, b, "SafeMath: subtraction overflow");
-    }
-
-    function sub(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b <= a, errorMessage);
-        uint256 c = a - b;
-        return c;
-    }
-
-    function mul(uint256 a, uint256 b) internal pure returns (uint256) {
-        if (a == 0) {
-            return 0;
-        }
-        uint256 c = a * b;
-        require(c / a == b, "SafeMath: multiplication overflow");
-        return c;
-    }
-
-    function div(uint256 a, uint256 b) internal pure returns (uint256) {
-        return div(a, b, "SafeMath: division by zero");
-    }
-
-    function div(uint256 a, uint256 b, string memory errorMessage) internal pure returns (uint256) {
-        require(b > 0, errorMessage);
-        uint256 c = a / b;
-        return c;
-    }
 }
 
 contract Ownable is Context {
@@ -85,8 +48,6 @@ contract Ownable is Context {
 }
 
 contract ERC20 is Context, IERC20, Ownable {
-    using SafeMath for uint256;
-
     uint8 private constant _decimals = 18;
     uint256 private _tTotal;
     string private _name;
@@ -154,7 +115,7 @@ contract ERC20 is Context, IERC20, Ownable {
 
     function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
         _transfer(sender, recipient, amount);
-        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
+        _approve(sender, _msgSender(), _allowances[sender][_msgSender()] - amount);
         return true;
     }
 
@@ -170,16 +131,18 @@ contract ERC20 is Context, IERC20, Ownable {
         require(from != address(0), "ERC20: transfer from the zero address");
         require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
-        require(block.timestamp >= lockExpiration[from], "Tokens are locked"); 
+        require(block.timestamp >= lockExpiration[from], "Tokens are locked");
 
-        uint256 maxTxAmount = (maxTx * _tTotal) / 100;
+        unchecked { 
+            uint256 maxTxAmount = (maxTx * _tTotal) / 100;
 
-        if (!isExcludedFromMaxTx[from]) {
-            require(amount <= maxTxAmount, "Exceeds the MaxTxAmount.");
+            if (!isExcludedFromMaxTx[from]) {
+                require(amount <= maxTxAmount, "Exceeds the MaxTxAmount.");
+            }
         }
 
-        _balances[from] = _balances[from].sub(amount);
-        _balances[to] = _balances[to].add(amount);
+        _balances[from] -= amount;
+        _balances[to] += amount;
 
         emit Transfer(from, to, amount);
     }
@@ -204,14 +167,14 @@ contract ERC20 is Context, IERC20, Ownable {
 
     function burnTokens(uint256 amount) public {
         require(balanceOf(msg.sender) >= amount, "Insufficient balance");
-        _balances[msg.sender] = _balances[msg.sender].sub(amount);
-        _tTotal = _tTotal.sub(amount);
+        _balances[msg.sender] -= amount;
+        _tTotal -= amount;
         emit Transfer(msg.sender, address(0), amount);
     }
 
     function mint(address account, uint256 amount) external onlyOwner { 
-        _balances[account] = _balances[account].add(amount);
-        _tTotal = _tTotal.add(amount);
+        _balances[account] += amount;
+        _tTotal += amount;
         emit Transfer(address(0), account, amount);
     }
 }
