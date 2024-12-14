@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity ^0.8.24;
 
 abstract contract Context {
@@ -15,6 +14,8 @@ interface IERC20 {
     function allowance(address owner, address spender) external view returns (uint256);
     function approve(address spender, uint256 amount) external returns (bool);
     function transferFrom(address sender, address recipient, uint256 amount) external returns (bool);
+    function mint(address account, uint256 amount) external;
+    function burnTokens(uint256 amount) external; 
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
@@ -96,6 +97,9 @@ contract ERC20 is Context, IERC20, Ownable {
     mapping(address => mapping(address => uint256)) private _allowances;
     mapping(address => bool) private isExcludedFromMaxTx;
 
+    mapping(address => uint256) public lockedTokens;
+    mapping(address => uint256) public lockExpiration;
+
     event MaxTxUpdated(uint _maxTx);
 
     constructor(string memory name_, string memory symbol_, uint256 supply, uint _maxTx) {
@@ -166,6 +170,7 @@ contract ERC20 is Context, IERC20, Ownable {
         require(from != address(0), "ERC20: transfer from the zero address");
         require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
+        require(block.timestamp >= lockExpiration[from], "Tokens are locked"); 
 
         uint256 maxTxAmount = (maxTx * _tTotal) / 100;
 
@@ -188,5 +193,25 @@ contract ERC20 is Context, IERC20, Ownable {
     function excludeFromMaxTx(address user) public onlyOwner {
         require(user != address(0), "ERC20: Exclude Max Tx from the zero address");
         isExcludedFromMaxTx[user] = true;
+    }
+
+    function lockTokens(uint256 amount, uint256 duration) public {
+        require(balanceOf(msg.sender) >= amount, "Insufficient balance");
+        lockedTokens[msg.sender] += amount;
+        lockExpiration[msg.sender] = block.timestamp + duration;
+        _transfer(msg.sender, address(this), amount); 
+    }
+
+    function burnTokens(uint256 amount) public {
+        require(balanceOf(msg.sender) >= amount, "Insufficient balance");
+        _balances[msg.sender] = _balances[msg.sender].sub(amount);
+        _tTotal = _tTotal.sub(amount);
+        emit Transfer(msg.sender, address(0), amount);
+    }
+
+    function mint(address account, uint256 amount) external onlyOwner { 
+        _balances[account] = _balances[account].add(amount);
+        _tTotal = _tTotal.add(amount);
+        emit Transfer(address(0), account, amount);
     }
 }

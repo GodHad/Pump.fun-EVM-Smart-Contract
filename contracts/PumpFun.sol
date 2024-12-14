@@ -1,3 +1,4 @@
+// PumpFun.sol
 // SPDX-License-Identifier: MIT
 
 pragma solidity ^0.8.24;
@@ -88,6 +89,12 @@ contract PumpFun is ReentrancyGuard {
     event Launched(address indexed token, address indexed pair, uint);
     event Deployed(address indexed token, uint256 amount0, uint256 amount1);
 
+    // Constants 
+    uint256 private constant TOKEN_CREATION_FEE = 0.02 ether; // Example fee in VLX
+    uint256 private constant MARKET_CAP_THRESHOLD = 69000 * 10**18; // $69k in VLX
+    uint256 private constant CREATOR_REWARD = 0.5 ether; // 0.5 VLX
+    uint256 private constant DEX_LISTING_FEE = 6 * 10**18; // 6 VLX
+
     constructor(address factory_, address router_, address fee_to, uint256 _fee) {
         owner = msg.sender;
         require(factory_ != address(0), "Zero addresses are not allowed.");
@@ -98,7 +105,7 @@ contract PumpFun is ReentrancyGuard {
         router = Router(router_);
         _feeTo = fee_to;
         fee = (_fee * 1 ether) / 1000;
-        uniswapV2Router = IUniswapV2Router02(0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24);
+        uniswapV2Router = IUniswapV2Router02(your_velas_router_address); 
     }
 
     modifier onlyOwner {
@@ -177,35 +184,40 @@ contract PumpFun is ReentrancyGuard {
         return tokens;
     }
 
-    function launch(string memory _name, string memory _ticker, string memory desc, string memory img, string[4] memory urls, uint256 _supply, uint maxTx) public payable nonReentrant returns (address, address, uint) {
-        require(msg.value >= fee, "Insufficient amount sent.");
-        
+    function launch(
+        string memory _name,
+        string memory _ticker,
+        string memory desc,
+        string memory img,
+        string[4] memory urls,
+        uint256 _supply,
+        uint maxTx
+    ) public payable nonReentrant returns (address, address, uint) {
+        require(msg.value >= TOKEN_CREATION_FEE, "Insufficient fee");
+
         ERC20 _token = new ERC20(_name, _ticker, _supply, maxTx);
-        address weth = router.WETH();
+        address weth = router.WETH(); 
         address _pair = factory.createPair(address(_token), weth);
         Pair pair_ = Pair(payable(_pair));
 
-        uint256 supply = _supply * 10 ** _token.decimals();
-        bool approved = _approval(address(router), address(_token), supply);
-        require(approved);
+        uint256 platformFee = msg.value / 100; 
+        uint256 remainingAmount = msg.value - platformFee;
 
-        uint256 liquidity = (lpFee * msg.value) / 100;
-        uint256 value = msg.value - liquidity;
-
-        router.addLiquidityETH{value: liquidity}(address(_token), supply);
+        uint256 initialTokens = calculateTokenAmount(remainingAmount); 
+        ERC20(_token).mint(msg.sender, initialTokens);
 
         Data memory _data = Data({
             token: address(_token),
             name: _name,
             ticker: _ticker,
-            supply: supply,
-            price: supply / pair_.MINIMUM_LIQUIDITY(),
+            supply: _supply * 10 ** _token.decimals(),
+            price: (_supply * 10 ** _token.decimals()) / pair_.MINIMUM_LIQUIDITY(),
             marketCap: pair_.MINIMUM_LIQUIDITY(),
-            liquidity: liquidity * 2,
+            liquidity: 0, // Initially 0, will be updated later
             _liquidity: pair_.MINIMUM_LIQUIDITY() * 2,
             volume: 0,
             volume24H: 0,
-            prevPrice: supply / pair_.MINIMUM_LIQUIDITY(),
+            prevPrice: (_supply * 10 ** _token.decimals()) / pair_.MINIMUM_LIQUIDITY(),
             lastUpdated: block.timestamp
         });
 
@@ -239,8 +251,8 @@ contract PumpFun is ReentrancyGuard {
             }
         }
 
-        (bool os, ) = payable(_feeTo).call{value: value}("");
-        require(os);
+        (bool feeTransferSuccess, ) = payable(_feeTo).call{value: platformFee}("");
+        require(feeTransferSuccess, "Fee transfer failed");
 
         emit Launched(address(_token), _pair, tokens.length);
         return (address(_token), _pair, tokens.length);
@@ -285,5 +297,40 @@ contract PumpFun is ReentrancyGuard {
         });
 
         return true;
+    }
+
+    function trackMarketCapAndAddLiquidity(address tokenAddress) private {
+        Token storage currentToken = token[tokenAddress];
+        uint256 marketCap = currentToken.data.price * currentToken.data.supply; 
+
+        if (marketCap >= MARKET_CAP_THRESHOLD && !currentToken.tradingOnUniswap) {
+            currentToken.tradingOnUniswap = true;
+
+            uint256 amountVLX = address(this).balance - DEX_LISTING_FEE; 
+            uint256 amountToken = calculateTokenAmount(amountVLX);
+
+            router.addLiquidityToDEX{value: amountVLX}(
+                address(this), 
+                currentToken.token,
+                amountVLX,
+                amountToken,
+                amountVLX, 
+                amountToken, 
+                currentToken.creator, 
+                block.timestampac
+            );
+
+            uint256 burnAmount = amountToken / 10; 
+            ERC20(currentToken.token).burnTokens(burnAmount);
+
+            (bool rewardTransferSuccess, ) = payable(currentToken.creator).call{value: CREATOR_REWARD}("");
+            require(rewardTransferSuccess, "Creator reward transfer failed");
+        }
+    }
+
+    function calculateTokenAmount(uint256 amountVLX) private pure returns (uint256) {
+        uint256 newReserve0 = VIRTUAL_SOL_RESERVES + amountVLX;
+        uint256 newReserve1 = VIRTUAL_TOKEN_RESERVES - (VIRTUAL_SOL_RESERVES * VIRTUAL_TOKEN_RESERVES) / newReserve0;
+        return newReserve1;
     }
 }

@@ -1,3 +1,4 @@
+// Router.sol
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
@@ -10,16 +11,16 @@ contract Router is ReentrancyGuard {
     using SafeMath for uint256;
 
     address private _factory;
-    address private _WETH;
+    address private _WVLX; // Velas Wrapped Native Token 
 
     uint public referralFee;
 
-    constructor(address factory_, address weth, uint refFee) {
+    constructor(address factory_, address wvlx, uint refFee) {
         require(factory_ != address(0), "Zero addresses are not allowed.");
-        require(weth != address(0), "Zero addresses are not allowed.");
+        require(wvlx != address(0), "Zero addresses are not allowed.");
 
         _factory = factory_;
-        _WETH = weth;
+        _WVLX = wvlx; 
 
         require(refFee <= 5, "Referral Fee cannot exceed 5%.");
 
@@ -30,24 +31,21 @@ contract Router is ReentrancyGuard {
         return _factory;
     }
 
-    function WETH() public view returns (address) {
-        return _WETH;
+    function WETH() public view returns (address) { 
+        return _WVLX; 
     }
 
-    // Transfer ETH to a specific address
-    function transferETH(address _address, uint256 amount) private returns (bool) {
+    function transferETH(address _address, uint256 amount) private returns (bool) { 
         require(_address != address(0), "Zero addresses are not allowed.");
-
         (bool os, ) = payable(_address).call{value: amount}("");
         return os;
     }
 
-    // Get amounts out after swapping
     function _getAmountsOut(address token, address weth, uint256 amountIn) private view returns (uint256 _amountOut) {
         require(token != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-        address pair = factory_.getPair(token, _WETH);
+        address pair = factory_.getPair(token, _WVLX); 
         Pair _pair = Pair(payable(pair));
 
         (uint256 reserveA, , uint256 reserveB) = _pair.getReserves();
@@ -55,7 +53,7 @@ contract Router is ReentrancyGuard {
 
         uint256 amountOut;
 
-        if (weth == _WETH) {
+        if (weth == _WVLX) { 
             uint256 newReserveB = reserveB.add(amountIn);
             uint256 newReserveA = k.div(newReserveB);
             amountOut = reserveA.sub(newReserveA);
@@ -73,12 +71,11 @@ contract Router is ReentrancyGuard {
         return amountOut;
     }
 
-    // Add liquidity ETH
     function _addLiquidityETH(address token, uint256 amountToken, uint256 amountETH) private returns (uint256, uint256) {
         require(token != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-        address pair = factory_.getPair(token, _WETH);
+        address pair = factory_.getPair(token, _WVLX); 
         Pair _pair = Pair(payable(pair));
 
         ERC20 token_ = ERC20(token);
@@ -96,18 +93,16 @@ contract Router is ReentrancyGuard {
 
     function addLiquidityETH(address token, uint256 amountToken) external payable nonReentrant returns (uint256, uint256) {
         uint256 amountETH = msg.value;
-
         (uint256 amount0, uint256 amount1) = _addLiquidityETH(token, amountToken, amountETH);
         return (amount0, amount1);
     }
 
-    // Remove liquidity ETH
     function _removeLiquidityETH(address token, uint256 liquidity, address to) private returns (uint256, uint256) {
         require(token != address(0), "Zero addresses are not allowed.");
         require(to != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-        address pair = factory_.getPair(token, _WETH);
+        address pair = factory_.getPair(token, _WVLX);
         Pair _pair = Pair(payable(pair));
 
         (uint256 reserveA, , ) = _pair.getReserves();
@@ -135,14 +130,13 @@ contract Router is ReentrancyGuard {
         return (amountToken, amountETH);
     }
 
-    // Swap tokens for ETH
     function swapTokensForETH(uint256 amountIn, address token, address to, address referree) public nonReentrant returns (uint256, uint256) {
         require(token != address(0), "Zero addresses are not allowed.");
         require(to != address(0), "Zero addresses are not allowed.");
         require(referree != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-        address pair = factory_.getPair(token, _WETH);
+        address pair = factory_.getPair(token, _WVLX); 
         Pair _pair = Pair(payable(pair));
 
         ERC20 token_ = ERC20(token);
@@ -181,7 +175,6 @@ contract Router is ReentrancyGuard {
         return (amountIn, amount);
     }
 
-    // Swap ETH for tokens
     function swapETHForTokens(address token, address to, address referree) public payable nonReentrant returns (uint256, uint256) {
         require(token != address(0), "Zero addresses are not allowed.");
         require(to != address(0), "Zero addresses are not allowed.");
@@ -190,12 +183,12 @@ contract Router is ReentrancyGuard {
         uint256 amountIn = msg.value;
 
         Factory factory_ = Factory(_factory);
-        address pair = factory_.getPair(token, _WETH);
+        address pair = factory_.getPair(token, _WVLX); 
         Pair _pair = Pair(payable(pair));
 
         ERC20 token_ = ERC20(token);
 
-        uint256 amountOut = _getAmountsOut(token, _WETH, amountIn);
+        uint256 amountOut = _getAmountsOut(token, _WVLX, amountIn); 
 
         bool approved = _pair.approval(address(this), token, amountOut);
         require(approved, "Not Approved.");
@@ -230,5 +223,31 @@ contract Router is ReentrancyGuard {
         _pair.swap(0, amountOut, amount, 0);
 
         return (amount, amountOut);
+    }
+
+    function addLiquidityToDEX(
+        address sender, 
+        address tokenA,
+        address tokenB,
+        uint256 amountADesired,
+        uint256 amountBDesired,
+        uint256 amountAMin,
+        uint256 amountBMin,
+        address to,
+        uint256 deadline
+    ) external payable nonReentrant returns (uint amountA, uint amountB, uint liquidity) {
+        ERC20(tokenA).transferFrom(sender, address(this), amountADesired);
+        ERC20(tokenA).approve(your_velas_dex_address, amountADesired);
+
+        (amountA, amountB, liquidity) = IYourVelasDEX(your_velas_dex_address).addLiquidityETH{value: msg.value}(
+            tokenA,
+            tokenB,
+            amountADesired,
+            amountBDesired,
+            amountAMin,
+            amountBMin,
+            to,
+            deadline
+        );
     }
 }
