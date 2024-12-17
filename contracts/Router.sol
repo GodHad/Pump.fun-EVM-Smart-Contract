@@ -6,9 +6,22 @@ import "./Factory.sol";
 import "./Pair.sol";
 import "./ERC20.sol";
 
+interface IYourVelasDEX { 
+    function addLiquidityETH(
+        address token,
+        address tokenB,
+        uint amountADesired,
+        uint amountBDesired,
+        uint amountAMin,
+        uint amountBMin,
+        address to,
+        uint deadline
+    ) external payable returns (uint amountA, uint amountB, uint liquidity);
+}
+
 contract Router is ReentrancyGuard {
     address private _factory;
-    address private _WVLX; // Velas Wrapped Native Token 
+    address private _WVLX; 
 
     uint public referralFee;
 
@@ -42,7 +55,7 @@ contract Router is ReentrancyGuard {
         require(token != address(0), "Zero addresses are not allowed.");
 
         Factory factory_ = Factory(_factory);
-        address pairAddress = factory_.getPair(token, _WVLX); 
+        address pairAddress = factory_.getPair(token, _WVLX);
         Pair _pair = Pair(payable(pairAddress));
 
         (uint256 reserveA, , uint256 reserveB) = _pair.getReserves();
@@ -64,6 +77,7 @@ contract Router is ReentrancyGuard {
             }
         }
 
+        // Apply fee deduction (adjust percentage as needed)
         amountOut = amountOut * 95 / 100; 
 
         return amountOut;
@@ -93,8 +107,8 @@ contract Router is ReentrancyGuard {
             "Transfer failed"
         ); 
 
-        // Calculate LP tokens to mint
-        uint256 totalSupply = IERC20(pairAddress).totalSupply(); 
+        //  Calculate LP tokens to mint
+        uint256 totalSupply = IERC20(pairAddress).totalSupply();
         if (totalSupply == 0) {
             amountToken = amountTokenDesired;
             amountETH = amountETHDesired;
@@ -111,6 +125,7 @@ contract Router is ReentrancyGuard {
             }
         }
 
+        // Mint LP tokens to msg.sender (liquidity provider)
         pair.mint(amountToken, msg.sender); 
 
         return (amountToken, amountETH);
@@ -145,7 +160,7 @@ contract Router is ReentrancyGuard {
             "Transfer failed"
         );
 
-        _pair.burn(amountETH, amountToken, msg.sender);
+        _pair.burn(amountETH, amountToken, msg.sender); 
 
         return (amountToken, amountETH);
     }
@@ -172,10 +187,10 @@ contract Router is ReentrancyGuard {
 
         uint fee = factory_.txFee();
 
+        uint256 txFee = (fee * amountOut) / 100;
+        uint256 _amount;
+        uint256 amount;
         unchecked { 
-            uint256 txFee = (fee * amountOut) / 100;
-            uint256 _amount;
-            uint256 amount;
 
             if (referree != address(0)) {
                 _amount = (referralFee * amountOut) / 100;
@@ -195,7 +210,7 @@ contract Router is ReentrancyGuard {
             ); 
         }
 
-        _pair.swap(amountIn, 0, 0, amount);
+        _pair.swap(amountIn, 0, 0, amount); 
 
         return (amountIn, amount);
     }
@@ -210,7 +225,7 @@ contract Router is ReentrancyGuard {
         Factory factory_ = Factory(_factory);
         address pairAddress = factory_.getPair(token, _WVLX); 
         Pair _pair = Pair(payable(pairAddress));
-
+        
         ERC20 token_ = ERC20(token);
 
         uint256 amountOut = _getAmountsOut(token, _WVLX, amountIn); 
@@ -220,10 +235,10 @@ contract Router is ReentrancyGuard {
 
         uint fee = factory_.txFee();
 
+        uint256 txFee = (fee * amountIn) / 100;
+        uint256 _amount;
+        uint256 amount;
         unchecked {
-            uint256 txFee = (fee * amountIn) / 100;
-            uint256 _amount;
-            uint256 amount;
 
             if (referree != address(0)) {
                 _amount = (referralFee * amountIn) / 100;
@@ -245,11 +260,11 @@ contract Router is ReentrancyGuard {
 
         require(token_.transferFrom(pairAddress, to, amountOut), "Transfer of token to pair failed.");
 
-        _pair.swap(0, amountOut, amount, 0);
+        _pair.swap(0, amountOut, amount, 0); 
 
         return (amount, amountOut);
     }
-
+/*
     function addLiquidityToDEX(
         address sender, 
         address tokenA,
@@ -262,9 +277,9 @@ contract Router is ReentrancyGuard {
         uint256 deadline
     ) external payable nonReentrant returns (uint amountA, uint amountB, uint liquidity) {
         ERC20(tokenA).transferFrom(sender, address(this), amountADesired);
-        ERC20(tokenA).approve(your_velas_dex_address, amountADesired);
+        ERC20(tokenA).approve(your_velas_dex_address, amountADesired); 
 
-        (amountA, amountB, liquidity) = IYourVelasDEX(your_velas_dex_address).addLiquidityETH{value: msg.value}(
+        (amountA, amountB, liquidity) = IYourVelasDEX(your_velas_dex_address).addLiquidityETH{value: msg.value}( 
             tokenA,
             tokenB,
             amountADesired,
@@ -275,4 +290,5 @@ contract Router is ReentrancyGuard {
             deadline
         );
     }
+    */
 }

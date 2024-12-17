@@ -21,7 +21,7 @@ module.exports = {
       viaIR: true
     }
   },
-  defaultNetwork: "localhost",
+  defaultNetwork: "velas",
   networks: {
     localhost: {
       url: "http://127.0.0.1:8545",
@@ -47,7 +47,9 @@ module.exports = {
       url: 'https://sepolia.base.org',
       accounts: [`0x${PRIVATE__KEY}`],
       gasPrice: 1000000000,
-    }
+    },
+    velas_testnet: { url: `https://api.testnet.velas.com`, accounts: [`0x${PRIVATE_KEY}`] },
+    velas: { url: `https://api.velas.com`, accounts: [`0x${PRIVATE_KEY}`] }
   },
   paths: {
     sources: "./contracts",
@@ -55,7 +57,7 @@ module.exports = {
     artifacts: "./artifacts"
   },
   mocha: {
-    timeout: 40000
+    timeout: 120000
   },
   etherscan: {
     apiKey: BASE_API_KEY

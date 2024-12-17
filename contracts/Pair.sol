@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "./ERC20.sol";
+import "./Router.sol";
 
 contract Pair is ReentrancyGuard {
     event Mint(uint256 reserve0, uint256 reserve1, address indexed lp);
@@ -35,7 +36,7 @@ contract Pair is ReentrancyGuard {
 
     // This function should only be callable by the Router contract
     function mint(uint256 amountVLX, address _lp) external returns (bool) {
-        require(msg.sender == Router(Factory(_factory).feeTo()), "Only the router can call this function.");
+        require(msg.sender == address(Router(Factory(_factory).feeTo())), "Only the router can call this function.");
         require(_lp != address(0), "Zero address is not allowed.");
 
         lp = _lp;
@@ -53,7 +54,7 @@ contract Pair is ReentrancyGuard {
 
     function swap(uint256 amount0In, uint256 amount0Out, uint256 amount1In, uint256 amount1Out) external returns (bool) {
         require(amount0In > 0 || amount1In > 0, "Insufficient input amount");
-        require(msg.sender == Router(Factory(_factory).feeTo()), "Only the router can call this function.");
+        require(msg.sender == address(Router(Factory(_factory).feeTo())), "Only the router can call this function.");
 
         if (amount0In > 0) {
             uint256 amountWithFee = applyFee(amount0In);
@@ -120,10 +121,12 @@ contract Pair is ReentrancyGuard {
     }
 
     function reserve0() public view returns (uint256) {
+        require(_tokenA != address(0), "Pair: Token A is not set");
         return IERC20(_tokenA).balanceOf(address(this));
     }
 
     function reserve1() public view returns (uint256) {
+        require(_tokenB != address(0), "Pair: Token B is not set");
         return IERC20(_tokenB).balanceOf(address(this));
     }
 
@@ -146,14 +149,15 @@ contract Pair is ReentrancyGuard {
     }
 
     // Updated to implement the PumpFun bonding curve formula
-    function calculateTokenAmount(uint256 amountVLX) private view returns (uint256) {
+    function calculateTokenAmount(uint256 amountVLX) public view returns (uint256) {
+        require(amountVLX > 0, "Amount must be positive");
         uint256 newReserve0 = VIRTUAL_SOL_RESERVES + amountVLX + reserve0();
         uint256 newReserve1 = VIRTUAL_TOKEN_RESERVES - (VIRTUAL_SOL_RESERVES * VIRTUAL_TOKEN_RESERVES) / newReserve0;
         return reserve1() - newReserve1; 
     }
 
     // Updated to implement the inverse of the PumpFun bonding curve formula
-    function calculateVLXAmount(uint256 amountTokens) private view returns (uint256) {
+    function calculateVLXAmount(uint256 amountTokens) public view returns (uint256) {
         uint256 newReserve1 = VIRTUAL_TOKEN_RESERVES - amountTokens + reserve1();
         uint256 newReserve0 = (VIRTUAL_SOL_RESERVES * VIRTUAL_TOKEN_RESERVES) / newReserve1 - VIRTUAL_SOL_RESERVES;
         return newReserve0 - reserve0();

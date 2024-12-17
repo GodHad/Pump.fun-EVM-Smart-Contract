@@ -55,7 +55,6 @@ contract PumpFun is ReentrancyGuard {
         string image;       
         string twitter;    
         string telegram;     
-        string youtube;      
         string website;     
         bool trading;
         bool tradingOnUniswap;
@@ -79,7 +78,7 @@ contract PumpFun is ReentrancyGuard {
     mapping(address => Token) public token;
     Token[] public tokens;
 
-    event Launched(address indexed token, address indexed pair, uint);
+    event Launched(address indexed token, address indexed pair, uint length);
     event Deployed(address indexed token, uint256 amount0, uint256 amount1);
 
     // Constants 
@@ -100,7 +99,7 @@ contract PumpFun is ReentrancyGuard {
         router = Router(router_);
         _feeTo = fee_to;
         fee = (_fee * 1 ether) / 1000;
-        uniswapV2Router = IUniswapV2Router02(your_velas_router_address); 
+        // uniswapV2Router = IUniswapV2Router02(your_velas_router_address); 
     }
 
     modifier onlyOwner {
@@ -150,7 +149,7 @@ contract PumpFun is ReentrancyGuard {
         string memory _ticker,
         string memory desc,
         string memory img,
-        string[4] memory urls,
+        string[3] memory urls,
         uint256 _supply,
         uint maxTx
     ) public payable nonReentrant returns (address, address, uint) {
@@ -161,12 +160,10 @@ contract PumpFun is ReentrancyGuard {
         address _pair = factory.createPair(address(_token), weth);
         Pair pair_ = Pair(payable(_pair));
 
-        unchecked { 
-            uint256 platformFee = msg.value / 100; 
-            uint256 remainingAmount = msg.value - platformFee;
-        }
+        uint256 platformFee = msg.value / 100; 
+        uint256 remainingAmount = msg.value - platformFee;
 
-        uint256 initialTokens = pair_.calculateTokenAmount(remainingAmount); 
+        uint256 initialTokens = calculateTokenAmount(remainingAmount); 
         ERC20(_token).mint(msg.sender, initialTokens);
 
         Data memory _data = Data({
@@ -174,13 +171,13 @@ contract PumpFun is ReentrancyGuard {
             name: _name,
             ticker: _ticker,
             supply: _supply * 10 ** _token.decimals(),
-            price: pair_.calculateVLXAmount(10 ** _token.decimals()), 
+            price: calculateVLXAmount(10 ** _token.decimals()), 
             marketCap: pair_.MINIMUM_LIQUIDITY(),
             liquidity: 0, 
             _liquidity: pair_.MINIMUM_LIQUIDITY() * 2,
             volume: 0,
             volume24H: 0,
-            prevPrice: pair_.calculateVLXAmount(10 ** _token.decimals()), 
+            prevPrice: calculateVLXAmount(10 ** _token.decimals()), 
             lastUpdated: block.timestamp
         });
 
@@ -193,8 +190,7 @@ contract PumpFun is ReentrancyGuard {
             image: img,
             twitter: urls[0],
             telegram: urls[1],
-            youtube: urls[2],
-            website: urls[3],
+            website: urls[2],
             trading: true,
             tradingOnUniswap: false
         });
@@ -220,18 +216,16 @@ contract PumpFun is ReentrancyGuard {
         (uint256 reserveA, uint256 reserveB , uint256 _reserveB) = pair.getReserves();
         (uint256 amount0In, uint256 amount1Out) = router.swapTokensForETH(amountIn, tk, to, referree);
 
-        unchecked { 
-            uint256 newReserveA = reserveA + amount0In;
-            uint256 newReserveB = reserveB - amount1Out;
-            uint256 _newReserveB = _reserveB - amount1Out;
-            uint256 duration = block.timestamp - token[tk].data.lastUpdated;
-            uint256 _liquidity = _newReserveB * 2;
-            uint256 liquidity = newReserveB * 2;
-            uint256 mCap = (token[tk].data.supply * _newReserveB) / newReserveA;
-            uint256 price = newReserveA / _newReserveB;
-            uint256 volume = duration > 86400 ? amount1Out : token[tk].data.volume24H + amount1Out;
-            uint256 _price = pair.calculateVLXAmount(amount1Out); 
-        }
+        uint256 newReserveA = reserveA + amount0In;
+        uint256 newReserveB = reserveB - amount1Out;
+        uint256 _newReserveB = _reserveB - amount1Out;
+        uint256 duration = block.timestamp - token[tk].data.lastUpdated;
+        uint256 _liquidity = _newReserveB * 2;
+        uint256 liquidity = newReserveB * 2;
+        uint256 mCap = (token[tk].data.supply * _newReserveB) / newReserveA;
+        uint256 price = newReserveA / _newReserveB;
+        uint256 volume = duration > 86400 ? amount1Out : token[tk].data.volume24H + amount1Out;
+        uint256 _price = pair.calculateVLXAmount(amount1Out); 
 
         token[tk].data = Data({
             token: tk,
@@ -257,10 +251,9 @@ contract PumpFun is ReentrancyGuard {
 
         if (marketCap >= MARKET_CAP_THRESHOLD && !currentToken.tradingOnUniswap) {
             currentToken.tradingOnUniswap = true;
-
+/*
             uint256 amountVLX = address(this).balance - DEX_LISTING_FEE; 
             uint256 amountToken = calculateTokenAmount(amountVLX);
-
             router.addLiquidityToDEX{value: amountVLX}(
                 address(this), 
                 currentToken.token,
@@ -271,20 +264,24 @@ contract PumpFun is ReentrancyGuard {
                 currentToken.creator, 
                 block.timestamp 
             );
-
-            unchecked {  
-                uint256 burnAmount = amountToken / 10; 
-            }
+            uint256 burnAmount = amountToken / 10; 
             ERC20(currentToken.token).burnTokens(burnAmount);
 
             (bool rewardTransferSuccess, ) = payable(currentToken.creator).call{value: CREATOR_REWARD}("");
             require(rewardTransferSuccess, "Creator reward transfer failed");
+*/
         }
     }
 
-    function calculateTokenAmount(uint256 amountVLX) private view returns (uint256) {
+    function calculateTokenAmount(uint256 amountVLX) private pure returns (uint256) {
         uint256 newReserve0 = VIRTUAL_SOL_RESERVES + amountVLX;
         uint256 newReserve1 = VIRTUAL_TOKEN_RESERVES - (VIRTUAL_SOL_RESERVES * VIRTUAL_TOKEN_RESERVES) / newReserve0;
         return newReserve1;
+    }
+
+    function calculateVLXAmount(uint256 amountTokens) private pure returns (uint256) {
+        uint256 newReserve1 = VIRTUAL_TOKEN_RESERVES - amountTokens;
+        uint256 newReserve0 = (VIRTUAL_SOL_RESERVES * VIRTUAL_TOKEN_RESERVES) / newReserve1 - VIRTUAL_SOL_RESERVES;
+        return newReserve0;
     }
 }
