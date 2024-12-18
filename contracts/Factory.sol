@@ -8,26 +8,18 @@ import "./Pair.sol";
 
 contract Factory is ReentrancyGuard {
     address private owner;
-
     address private _feeTo;
-
     mapping (address => mapping (address => address)) private pair;
-
     address[] private pairs;
-
-    uint private constant fee = 5;
 
     constructor(address fee_to) {
         owner = msg.sender;
-
         require(fee_to != address(0), "Zero addresses are not allowed.");
-
         _feeTo = fee_to;
     }
 
     modifier onlyOwner {
         require(msg.sender == owner, "Only the owner can call this function.");
-
         _;
     }
 
@@ -37,7 +29,7 @@ contract Factory is ReentrancyGuard {
         require(tokenA != address(0), "Zero addresses are not allowed.");
         require(tokenB != address(0), "Zero addresses are not allowed.");
 
-        Pair _pair = new Pair(address(this), tokenA, tokenB);
+        Pair _pair = new Pair(address(this), tokenA); // Pass router address to Pair constructor
 
         pair[tokenA][tokenB] = address(_pair);
         pair[tokenB][tokenA] = address(_pair);
@@ -50,10 +42,8 @@ contract Factory is ReentrancyGuard {
 
         return address(_pair);
     }
-
     function createPair(address tokenA, address tokenB) external nonReentrant returns (address) {
         address _pair = _createPair(tokenA, tokenB);
-
         return _pair;
     }
 
@@ -79,11 +69,6 @@ contract Factory is ReentrancyGuard {
 
     function setFeeTo(address fee_to) public onlyOwner{
         require(fee_to != address(0), "Zero addresses are not allowed.");
-
         _feeTo = fee_to;
-    }
-
-    function txFee() public pure returns (uint) {
-        return fee;
     }
 }
