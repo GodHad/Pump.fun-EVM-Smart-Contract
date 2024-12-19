@@ -3,6 +3,7 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+<<<<<<< HEAD
 import "hardhat/console.sol";
 
 import "./Factory.sol";
@@ -18,6 +19,14 @@ interface IUniswapV2Factory {
 }
 
 interface IUniswapV2Router02 {
+=======
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+import "./Factory.sol";
+import "./Pair.sol";
+
+interface IWagyuSwapRouter02 {
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
     function swapExactTokensForETHSupportingFeeOnTransferTokens(
         uint amountIn,
         uint amountOutMin,
@@ -43,6 +52,7 @@ interface IUniswapV2Router02 {
         returns (uint amountToken, uint amountETH, uint liquidity);
 }
 
+<<<<<<< HEAD
 contract VelasFun is ReentrancyGuard {
     receive() external payable {}
     
@@ -66,6 +76,21 @@ contract VelasFun is ReentrancyGuard {
         address user;
         Token[] tokens;
     }
+=======
+interface IWagyuSwapFactory {
+    function createPair(address tokenA, address tokenB) external returns (address pair);
+}
+
+contract VelasFun is ReentrancyGuard {
+    receive() external payable {}
+
+    address private owner;
+    Factory private factory;
+    address private _feeTo;
+    uint256 private fee;
+    uint private constant lpFee = 5;
+    address private constant WVLX = 0xc579D1f3CF86749E05CD06f7ADe17856c2CE3126;
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
 
     struct Token {
         address creator;
@@ -78,7 +103,11 @@ contract VelasFun is ReentrancyGuard {
         string telegram;
         string website;
         bool trading;
+<<<<<<< HEAD
         bool tradingOnUniswap;
+=======
+        bool tradingOnWagyuSwap;
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
     }
 
     struct Data {
@@ -88,6 +117,7 @@ contract VelasFun is ReentrancyGuard {
         uint256 supply;
         uint256 price;
         uint256 marketCap;
+<<<<<<< HEAD
         uint256 liquidity;
         uint256 _liquidity;
         uint256 volume;
@@ -124,10 +154,29 @@ contract VelasFun is ReentrancyGuard {
         fee = (_fee * 1 ether) / 1000;
 
         uniswapV2Router = IUniswapV2Router02(0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24);
+=======
+    }
+
+    mapping(address => Token) public token;
+    Token[] public tokens;
+
+    event Launched(address indexed token, address indexed pair, uint);
+    event Deployed(address indexed token, uint256 amount0, uint256 amount1);
+
+    constructor(address factory_, address fee_to, uint256 _fee) {
+        owner = msg.sender;
+        require(factory_ != address(0), "Zero addresses are not allowed.");
+        require(fee_to != address(0), "Zero addresses are not allowed.");
+
+        factory = Factory(factory_);
+        _feeTo = fee_to;
+        fee = (_fee * 1 ether) / 1000;
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
     }
 
     modifier onlyOwner {
         require(msg.sender == owner, "Only the owner can call this function.");
+<<<<<<< HEAD
 
         _;
     }
@@ -180,13 +229,21 @@ contract VelasFun is ReentrancyGuard {
         return approved;
     }
 
+=======
+        _;
+    }
+
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
     function launchFee() public view returns (uint256) {
         return fee;
     }
 
     function updateLaunchFee(uint256 _fee) public returns (uint256) {
         fee = _fee;
+<<<<<<< HEAD
 
+=======
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
         return _fee;
     }
 
@@ -202,6 +259,7 @@ contract VelasFun is ReentrancyGuard {
         return owner;
     }
 
+<<<<<<< HEAD
     function setFeeTo(address fee_to) public onlyOwner{
         require(fee_to != address(0), "Zero addresses are not allowed.");
 
@@ -220,6 +278,13 @@ contract VelasFun is ReentrancyGuard {
         return _profile.tokens;
     }
 
+=======
+    function setFeeTo(address fee_to) public onlyOwner {
+        require(fee_to != address(0), "Zero addresses are not allowed.");
+        _feeTo = fee_to;
+    }
+
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
     function getTokens() public view returns (Token[] memory) {
         return tokens;
     }
@@ -228,14 +293,19 @@ contract VelasFun is ReentrancyGuard {
         require(msg.value >= fee, "Insufficient amount sent.");
 
         ERC20 _token = new ERC20(_name, _ticker, _supply, maxTx);
+<<<<<<< HEAD
 
         address weth = router.WETH();
 
         address _pair = factory.createPair(address(_token), weth);
+=======
+        address _pair = factory.createPair(address(_token), WVLX);
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
 
         Pair pair_ = Pair(payable(_pair));
 
         uint256 supply = _supply * 10 ** _token.decimals();
+<<<<<<< HEAD
 
         bool approved = _approval(address(router), address(_token), supply);
         require(approved);
@@ -244,12 +314,22 @@ contract VelasFun is ReentrancyGuard {
         uint256 value = msg.value - liquidity;
 
         router.addLiquidityETH{value: liquidity}(address(_token), supply);
+=======
+        uint256 value = msg.value;
+
+        // Mint tokens dynamically
+        uint256 requiredTokens = supply - _token.balanceOf(address(this));
+        if (requiredTokens > 0) {
+            _token.mint(address(this), requiredTokens); // Mint tokens as needed
+        }
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
 
         Data memory _data = Data({
             token: address(_token),
             name: _name,
             ticker: _ticker,
             supply: supply,
+<<<<<<< HEAD
             price: supply / pair_.MINIMUM_LIQUIDITY(),
             marketCap: pair_.MINIMUM_LIQUIDITY(),
             liquidity: liquidity * 2,
@@ -258,6 +338,10 @@ contract VelasFun is ReentrancyGuard {
             volume24H: 0,
             prevPrice: supply / pair_.MINIMUM_LIQUIDITY(),
             lastUpdated: block.timestamp
+=======
+            price: pair_.calculateAmountOut(0, false), // Get initial price from Pair
+            marketCap: pair_.calculateAmountOut(0, false) * supply
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
         });
 
         Token memory token_ = Token({
@@ -271,6 +355,7 @@ contract VelasFun is ReentrancyGuard {
             telegram: urls[1],
             website: urls[2],
             trading: true,
+<<<<<<< HEAD
             tradingOnUniswap: false
         });
 
@@ -294,6 +379,15 @@ contract VelasFun is ReentrancyGuard {
             }
         }
 
+=======
+            tradingOnWagyuSwap: false
+        });
+
+        token[address(_token)] = token_;
+        tokens.push(token_);
+
+        // Transfer fee
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
         (bool os, ) = payable(_feeTo).call{value: value}("");
         require(os);
 
@@ -304,6 +398,7 @@ contract VelasFun is ReentrancyGuard {
         return (address(_token), _pair, n);
     }
 
+<<<<<<< HEAD
     function swapTokensForETH(uint256 amountIn, address tk, address to, address referree) public returns (bool) {
         require(tk != address(0), "Zero addresses are not allowed.");
         require(to != address(0), "Zero addresses are not allowed.");
@@ -484,6 +579,35 @@ contract VelasFun is ReentrancyGuard {
         address uniswapV2Pair = IUniswapV2Factory(uniswapV2Router.factory()).createPair(tk, uniswapV2Router.WETH());
 
         uniswapV2Router.addLiquidityETH{value: address(this).balance}(
+=======
+    function getToken(address tk) public view returns (Token memory) {
+        return token[tk];
+    }
+
+    function _deploy(address tk) private {
+        require(tk != address(0), "Zero addresses are not allowed.");
+
+        // Transfer 30,000 VLX deployment fee
+        IERC20 wvlxToken = IERC20(WVLX);
+        require(wvlxToken.transferFrom(msg.sender, owner, 30_000 * 10 ** 18), "Failed to transfer VLX deployment fee");
+
+        openTradingOnWagyuSwap(tk);
+    }
+
+    function openTradingOnWagyuSwap(address tk) private {
+        require(tk != address(0), "Zero addresses are not allowed.");
+
+        ERC20 token_ = ERC20(tk);
+        Token storage _token = token[tk];
+
+        require(_token.trading && !_token.tradingOnWagyuSwap, "Trading is already open");
+
+        // Dynamic minting can be added here if more tokens are needed for liquidity
+
+        address wagyuSwapPair = IWagyuSwapFactory(IWagyuSwapRouter02(0x0000000000000000000000000000000000000000).factory()).createPair(tk, WVLX);
+
+        IWagyuSwapRouter02(0x0000000000000000000000000000000000000000).addLiquidityETH{value: address(this).balance}(
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
             tk,
             token_.balanceOf(address(this)),
             0,
@@ -492,6 +616,12 @@ contract VelasFun is ReentrancyGuard {
             block.timestamp
         );
 
+<<<<<<< HEAD
         ERC20(uniswapV2Pair).approve(address(uniswapV2Router), type(uint).max);
     }
 }
+=======
+        IERC20(wagyuSwapPair).approve(address(0x0000000000000000000000000000000000000000), type(uint).max);
+    }
+}
+>>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201

@@ -14,7 +14,6 @@ contract Factory is ReentrancyGuard {
     mapping (address => mapping (address => address)) private pair;
 
     address[] private pairs;
-
     uint private constant fee = 5;
 
     constructor(address fee_to) {
@@ -37,20 +36,16 @@ contract Factory is ReentrancyGuard {
         require(tokenA != address(0), "Zero addresses are not allowed.");
         require(tokenB != address(0), "Zero addresses are not allowed.");
 
-        Pair _pair = new Pair(address(this), tokenA, tokenB);
-
-        pair[tokenA][tokenB] = address(_pair);
-        pair[tokenB][tokenA] = address(_pair);
-
-        pairs.push(address(_pair));
-
-        uint n = pairs.length;
-
-        emit PairCreated(tokenA, tokenB, address(_pair), n);
-
-        return address(_pair);
+        unchecked { 
+            Pair _pair = new Pair(address(this), tokenA, tokenB);
+            pair[tokenA][tokenB] = address(_pair);
+            pair[tokenB][tokenA] = address(_pair);
+            pairs.push(address(_pair));
+            uint n = pairs.length; 
+            emit PairCreated(tokenA, tokenB, address(_pair), n);
+            return address(_pair);
+        }
     }
-
     function createPair(address tokenA, address tokenB) external nonReentrant returns (address) {
         address _pair = _createPair(tokenA, tokenB);
 
@@ -81,9 +76,5 @@ contract Factory is ReentrancyGuard {
         require(fee_to != address(0), "Zero addresses are not allowed.");
 
         _feeTo = fee_to;
-    }
-
-    function txFee() public pure returns (uint) {
-        return fee;
     }
 }
