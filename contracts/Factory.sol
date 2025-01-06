@@ -1,32 +1,24 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-
-import "./Pair.sol";
+import "./Pair.sol"; 
 
 contract Factory is ReentrancyGuard {
     address private owner;
-
     address private _feeTo;
-
     mapping (address => mapping (address => address)) private pair;
-
     address[] private pairs;
     uint private constant fee = 5;
 
     constructor(address fee_to) {
         owner = msg.sender;
-
         require(fee_to != address(0), "Zero addresses are not allowed.");
-
         _feeTo = fee_to;
     }
 
     modifier onlyOwner {
         require(msg.sender == owner, "Only the owner can call this function.");
-
         _;
     }
 
@@ -46,9 +38,9 @@ contract Factory is ReentrancyGuard {
             return address(_pair);
         }
     }
+
     function createPair(address tokenA, address tokenB) external nonReentrant returns (address) {
         address _pair = _createPair(tokenA, tokenB);
-
         return _pair;
     }
 
@@ -56,7 +48,7 @@ contract Factory is ReentrancyGuard {
         return pair[tokenA][tokenB];
     }
 
-    function allPairs(uint n) public view returns (address)  {
+    function allPairs(uint n) public view returns (address) {
         return pairs[n];
     }
 
@@ -72,9 +64,12 @@ contract Factory is ReentrancyGuard {
         return owner;
     }
 
-    function setFeeTo(address fee_to) public onlyOwner{
+    function setFeeTo(address fee_to) public onlyOwner {
         require(fee_to != address(0), "Zero addresses are not allowed.");
-
         _feeTo = fee_to;
+    }
+
+    function txFee() public pure returns (uint) {
+        return fee;
     }
 }

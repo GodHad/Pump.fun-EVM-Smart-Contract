@@ -21,7 +21,7 @@ module.exports = {
       viaIR: true
     }
   },
-  defaultNetwork: "velas",
+  defaultNetwork: "hardhat",
   networks: {
     localhost: {
       url: "http://127.0.0.1:8545",

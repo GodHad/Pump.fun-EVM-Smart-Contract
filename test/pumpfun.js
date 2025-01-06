@@ -1,168 +1,117 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-describe("VelasFun Contract", function () {
-    let VelasFun, velasFun, newToken;
-    let owner, addr1, addr2;
-    const initialSupply = ethers.parseEther("1000000"); // 1 million tokens
-    const feeAddress = "0xYourFeeAddress"; // Update with actual fee address
-    const feeAmount = ethers.parseEther("0.1"); // Example fee in ETH
-
-    beforeEach(async function () {
-        // Get the signers
-        [owner, addr1, addr2] = await ethers.getSigners();
-        const Factory = await ethers.getContractFactory('Factory');
-        const factory = await Factory.deploy(owner.address);
-        await factory.waitForDeployment();
-<<<<<<< HEAD
-        // Deploy the VelasFun contract
-        const Router = await ethers.getContractFactory('Router');
-        const router = await Router.deploy(await factory.getAddress(), '0xc579d1f3cf86749e05cd06f7ade17856c2ce3126', 5);
-=======
-        const factoryAddress = await factory.getAddress();
-        console.log('Factory deployed to: ', await factory.getAddress());
-
-        const TestPumpFun = await ethers.getContractFactory("VelasFun");
-        const pumpFun = await TestPumpFun.deploy(
-            factoryAddress,
-            owner.address,
-            5
-        );
-        const pumpFunAddress = await pumpFun.getAddress();
-        console.log('Velas deployed to: ', pumpFunAddress);
-        const TestRouter = await ethers.getContractFactory("Router");
-        const router = await TestRouter.deploy(
-            factoryAddress,
-            "0xc579d1f3cf86749e05cd06f7ade17856c2ce3126", // Replace with WVLX address
-            pumpFunAddress,
-            1
-        );
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
-        await router.waitForDeployment();
-
-<<<<<<< HEAD
-        VelasFun = await ethers.getContractFactory("VelasFun");
-        velasFun = await VelasFun.deploy(await factory.getAddress(), await router.getAddress(), owner.address, 1);
-        await velasFun.waitForDeployment(); // Wait for deployment
-        const velasFunAddress = await velasFun.getAddress();
-        console.log("VelasFun deployed at:", velasFunAddress);
-=======
-
-        // Launch a new token
-        const urls = ['https://twitter.com', 'https://telegram.com', 'https://website.com'];
-
-        const launchTx = await pumpFun.launch("TestToken",
-            "TTK",
-            "A test token",
-            "image.png",
-            urls,
-            1000000, // Supply
-            5, {
-            value: ethers.parseEther('0.02'),
-        });
-        const launchReceipt = await launchTx.wait();
-        // console.log(launchReceipt);
-        // const event = launchReceipt.events.find(event => event.event === 'Launched');
-        // console.log(event)
-        const tokenAddress = launchReceipt.logs[launchReceipt.logs.length - 1].args[0]; // Get the token address
-
-        console.log("Token Address:", tokenAddress); // Log the token address
-        // console.log("Token Address:", otherAddress); // Log the token address
-
-        // Buy tokens (swap ETH for tokens)
-        const buyTx = await router.swapVlxForTokens(
-            tokenAddress,
-            { 
-                value: ethers.parseEther("1") ,
-                sender: owner.address
-            }
-        );
-        console.log("Buy transaction hash:", buyTx.hash); // Log the transaction hash
-        await buyTx.wait();
-
-        // Check owner's token balance after buying
-        const ownerBalanceAfterBuy = await erc20Token.balanceOf(owner.address);
-        expect(ownerBalanceAfterBuy).to.be.gt(0); // Greater than 0
-
-        // Sell tokens (swap tokens for ETH)
-        const sellTx = await router.swapTokensForVlx(
-            ethers.parseEther("50"), // Amount of tokens to sell
-            tokenAddress,
-            {
-                sender: owner.address
-            }
-        );
-        await sellTx.wait();
-
-        // Check owner's token balance after selling
-        const ownerBalanceAfterSell = await erc20Token.balanceOf(owner.address);
-        expect(ownerBalanceAfterSell).to.be.lt(ownerBalanceAfterBuy); // Less than balance after buying
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
-    });
-
-    it("Should allow a user to launch a new token with the specified parameters", async function () {
-        const name = "TestToken";
-        const symbol = "TT";
-        const decimals = 18;
-        const totalSupply = ethers.parseEther("1000000"); // 1 million tokens
-        const maxTx = ethers.parseEther("5"); // Max transaction limit
-        const tokenFee = ethers.parseEther("0.01"); // Fee per token (ETH)
-        const wallet = addr1.address;
-
-        // Call the launch function to create a new token
-        const tx = await velasFun.connect(owner).launch(
-            name,
-            symbol,
-            'decimals',
-            'image',
-            ["", "", ""],
-            1000000,
-            1,
-            { value: ethers.parseEther('1') }
-        );
-        const receipt = await tx.wait();
-        const newTokenAddress = receipt.logs[receipt.logs.length - 1].args[0];
-        const pairAddress = receipt.logs[receipt.logs.length - 1].args[1];
-        console.log(newTokenAddress);
-        // Fetch the new token contract
-        newToken = await ethers.getContractAt("contracts/ERC20.sol:ERC20", newTokenAddress);
-        expect(await newToken.name()).to.equal(name);
-        expect(await newToken.symbol()).to.equal(symbol);
-        //   expect(await newToken.decimals()).to.equal(decimals);
-        expect(await newToken.totalSupply()).to.equal(totalSupply, "Total supply mismatch.");
-
-        const buyAmountInEth = ethers.parseEther("1"); // Buying with 1 ETH
+describe("VelasFunPlatform Contract", async function () {
+  const [owner, creator, buyer, seller] = await ethers.getSigners();
+  it("add the admin", async function () {
     
-        const swapTx = await velasFun.connect(owner).swapETHForTokens(await newToken.getAddress(), addr1.address, addr2.address, {
-            value: buyAmountInEth,
-        });
-        await swapTx.wait();
-    
-        const tokenBalance = await newToken.balanceOf(addr1);
-        console.log("Addr1 Token Balance After Buying:", tokenBalance.toString(), await newToken.getAddress());
-    
-        expect(tokenBalance).to.be.gt(0, "User should receive tokens after swapping ETH");
-    
-        // Perform the swap using VelasFun's swapTokensToETH
-        await newToken.connect(addr1).approve(await velasFun.getAddress(), 100000)
-        const allowance = await newToken.allowance(addr1.address, await velasFun.getAddress());
-        expect(allowance).to.equal(100000, 'allownace was not set correctly');
+    const platform = await ethers.getContractAt("VelasFunPlatform", '0x46e281F6C6f3CfBEf9cbAcC7F2bE85e65591F3f0');
+    const txUpdate = await platform.connect(owner).updateVariables(
+      false,
+      [
+        '0x1066f339C393Cd41D1acF0f0AAE7CDE9f3B30596', 
+        '0x4191965460D99eA9486519727a91Dbf112bd4d5f',
+        '0xb5C64BfD79f0048EA88E1699834273704aBAB3D3',
+        '0xd1DD7014C690374e113AF710886097e6B68CBCdF'
+      ],
+      1,
+      1,
+      1,
+      1,
+      '0x1066f339C393Cd41D1acF0f0AAE7CDE9f3B30596'
+    )
+  })
+  it("should allow a user to sell tokens", async function () {
+    // Create a token
+    // const arrayOfVelasAddress = [
+    //   '0x51E9491aAfaEbd75eCF9bc0436da0ff99C35753A'
+    // ]
+    // arrayOfVelasAddress.forEach(async element => {
+      // const platform = await ethers.getContractAt("VelasFunPlatform", '0x51E9491aAfaEbd75eCF9bc0436da0ff99C35753A');
+      // await platform.connect(owner).withdraw();
+    // });
 
-        // console.log('pass');
+    // const VelasFun = await ethers.getContractFactory("VelasFunPlatform");
+    // const velasFun = await VelasFun.deploy();
+    // await velasFun.waitForDeployment();
+    // const velasAddress = await velasFun.getAddress();
+    // console.log("Old Velas contract", velasAddress)
+    // const platform = await ethers.getContractAt("VelasFunPlatform", await velasFun.getAddress());
+    // const creationFee = ethers.parseEther("1");
+    // const solAmount = ethers.parseEther("100");
+    // await platform.connect(owner).createToken(
+    //   "Test Token 1",
+    //   "TTKN1",
+    //   "A test token",
+    //   "https://example.com/image.png",
+    //   "https://twitter.com/test",
+    //   "https://telegram.me/test",
+    //   "https://example.com",
+    //   "https://example.com",
+    //   solAmount,
+    //   { value: creationFee + solAmount }
+    // );
+    // const tokenList = await platform.connect(owner).getTokenList();
+    // const tokenAddress = tokenList[0];
+    // // Buy tokens first
+    // await platform.connect(owner).buyTokens(tokenAddress, solAmount, { value: solAmount });
+    // const memecoin = await ethers.getContractAt("Memecoin", tokenAddress);
+    // const platformBalance = await memecoin.balanceOf(velasAddress);
+    // console.log("after buying: ", platformBalance)
 
-        // const approveTx = await velasFun.connect(addr1).approval(addr1.address, await newToken.getAddress(), 100000);
-        // await expect(approveTx).to.emit(velasFun, 'Approval').withArgs(addr1.address, await newToken.getAddress(), 100000);
-        // await approveTx.wait();
+    // const newVelasFun = await VelasFun.deploy();
+    // await newVelasFun.waitForDeployment();
+    // const newVelasAddress = await newVelasFun.getAddress();
 
-        const sellTx = await velasFun.connect(addr1).swapTokensForETH(100000, await newToken.getAddress(), addr1.address, addr2.address);
-        await sellTx.wait();
-    
-        // Check ETH balance after selling
-        const ethBalanceAfter = await ethers.provider.getBalance(addr1.address);
-        console.log("Addr1 ETH Balance After Selling:", ethBalanceAfter.toString());
-    
-        // Verify that the token balance is zero after selling
-        const tokenBalanceAfter = await newToken.balanceOf(addr1.address);
-        expect(tokenBalanceAfter).to.equal(0, "User should have no tokens after selling");
-    });
+    // await platform.connect(owner).migrate(newVelasAddress);
+
+    // console.log("New velas fun contract:", newVelasAddress);
+    // const newPlatform = await ethers.getContractAt("VelasFunPlatform", newVelasAddress);
+    // await newPlatform.connect(owner).confirmMigration(velasAddress);
+    // const newPlatformBalance = await memecoin.balanceOf(newVelasAddress)
+
+    // console.log("balances: ", platformBalance, newPlatformBalance)
+
+    // await expect(newPlatformBalance).to.equal(platformBalance)
+
+    // const txUpdate = await platform.connect(owner).updateVariables(
+    //   false,
+    //   ['0x1066f339C393Cd41D1acF0f0AAE7CDE9f3B30596', '0x4191965460D99eA9486519727a91Dbf112bd4d5f'],
+    //   2,
+    //   2,
+    //   2,
+    //   2,
+    //   '0x1066f339C393Cd41D1acF0f0AAE7CDE9f3B30596'
+    // )
+    // await expect(txUpdate)
+    //   .to.emit(platform, "VariablesUpdated")
+    //   .withArgs(
+    //     false, // paused
+    //     ["0x1066f339C393Cd41D1acF0f0AAE7CDE9f3B30596", '0x4191965460D99eA9486519727a91Dbf112bd4d5f'], // admin
+    //     2000000000000000000n, // creationFee
+    //     2, // transactionFee
+    //     2000000000000000000n, // creatorReward
+    //     2000000000000000000n, // velasFunReward
+    //     "0x1066f339C393Cd41D1acF0f0AAE7CDE9f3B30596" // feeAddress
+    //   );
+
+    // const tokenList = await platform.connect(owner).getTokenList();
+    // const tokenAddress = tokenList[0];
+    // console.log('tokenAddress');
+    // // Mint tokens to the platform for testing
+    // const memecoin = await ethers.getContractAt("Memecoin", tokenAddress);
+    // let ownerBalance = await memecoin.balanceOf(owner.address);
+    // console.log("after creating: ", ownerBalance)
+
+    // await memecoin.connect(owner).approve(await platform.getAddress(), ownerBalance);
+
+    // // Sell tokens
+    // const _ = await memecoin.balanceOf(owner.address);
+    // // Check refund
+    // const refund = await ethers.provider.getBalance(owner.address);
+    // console.log(_, refund)
+    // await platform.connect(owner).sellTokens(tokenAddress, ownerBalance);
+    // expect(refund).to.be.gt(solAmount); // Buyer should get a refund
+
+  });
 });

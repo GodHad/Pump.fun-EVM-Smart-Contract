@@ -1,32 +1,62 @@
 // SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
-pragma solidity ^0.8.24;
-
+import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-<<<<<<< HEAD
-import "hardhat/console.sol";
+import "./Memecoin.sol";
 
-import "./Factory.sol";
-import "./Pair.sol";
-import "./Router.sol";
-import "./ERC20.sol";
+struct TokenInfo {
+    address tokenAddress;
+    address creator;
+    string description;
+    string image;
+    string twitter;
+    string telegram;
+    string website;
+    uint256 totalSold;
+    uint256 totalRevenue;
+    uint256 totalSupply;
+    bool tradingOnUniswap;
+    bool tradingPaused;
+    address uniswapPair;
+}
+
+interface IBaseFunPlatform {
+    function getTokenList() external view returns (address[] memory);
+    function getToken(address token) external view returns (TokenInfo memory);
+    function setMigrationVariables(
+        uint256 _creationFee,
+        uint256 _feePercent,
+        uint256 _creatorReward,
+        uint256 _baseFunReward,
+        address _feeAddress,
+        bool _paused,
+        address[] memory _admin
+    ) external;
+}
 
 interface IUniswapV2Factory {
-    function createPair(
-        address tokenA,
-        address tokenB
-    ) external returns (address pair);
+    function createPair(address tokenA, address tokenB) external returns (address pair);
+    function getPair(address tokenA, address tokenB) external view returns (address pair);
 }
 
 interface IUniswapV2Router02 {
-=======
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+    function addLiquidityETH(
+        address token,
+        uint amountTokenDesired,
+        uint amountTokenMin,
+        uint amountETHMin,
+        address to,
+        uint deadline
+    ) external payable returns (uint amountToken, uint amountETH, uint liquidity);
 
-import "./Factory.sol";
-import "./Pair.sol";
+    function swapExactETHForTokensSupportingFeeOnTransferTokens(
+        uint amountOutMin,
+        address[] calldata path,
+        address to,
+        uint deadline
+    ) external payable;
 
-interface IWagyuSwapRouter02 {
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
     function swapExactTokensForETHSupportingFeeOnTransferTokens(
         uint amountIn,
         uint amountOutMin,
@@ -36,592 +66,397 @@ interface IWagyuSwapRouter02 {
     ) external;
 
     function factory() external pure returns (address);
-
     function WETH() external pure returns (address);
-
-    function addLiquidityETH(
-        address token,
-        uint amountTokenDesired,
-        uint amountTokenMin,
-        uint amountETHMin,
-        address to,
-        uint deadline
-    )
-        external
-        payable
-        returns (uint amountToken, uint amountETH, uint liquidity);
 }
 
-<<<<<<< HEAD
-contract VelasFun is ReentrancyGuard {
-    receive() external payable {}
-    
-    address private owner;
+contract BaseFunPlatform is Ownable, ReentrancyGuard {
+    uint256 public CREATION_FEE = 0.0006 ether;
+    uint256 private feePercent = 1;
+    uint256 private creatorReward = 0.03 ether;
+    uint256 private baseFunReward = 0.5 ether;
+    uint256 private GRADUATION_MARKET_CAP = 5 ether;
+    address private feeAddress;
 
-    Factory private factory;
+    bool private paused = false;
+    address[] public admin;
 
-    Router private router;
-
-    address private _feeTo;
-
-    uint256 private fee;
-
-    uint private constant lpFee = 5;
-
-    uint256 private constant mcap = 100_000 ether;
+    uint256 public constant INITIAL_VIRTUAL_VLX = 1.8 ether;
+    uint256 public constant INITIAL_VIRTUAL_TOKENS = 1_087_598_453 * 10 ** 6;
+    uint256 public constant K = INITIAL_VIRTUAL_VLX * INITIAL_VIRTUAL_TOKENS;
 
     IUniswapV2Router02 private uniswapV2Router;
 
-    struct Profile {
-        address user;
-        Token[] tokens;
-    }
-=======
-interface IWagyuSwapFactory {
-    function createPair(address tokenA, address tokenB) external returns (address pair);
-}
+    mapping(address => TokenInfo) private tokens;
+    address[] private tokenList;
 
-contract VelasFun is ReentrancyGuard {
-    receive() external payable {}
+    event TokenCreated(address indexed tokenAddress, address indexed creator, string name, string symbol, uint256 amount, uint256 price, uint256 reserve0, uint256 reserve1);
+    event TokenPurchased(address indexed buyer, address indexed tokenAddress, uint256 amount, uint256 price, uint256 reserve0, uint256 reserve1);
+    event TokenSold(address indexed seller, address indexed tokenAddress, uint256 tokensSold, uint256 price, uint256 reserve0, uint256 reserve1);
+    event VariablesUpdated(bool paused, address[] admin, uint256 creationFee, uint256 feePercent, uint256 creatorReward, uint256 baseFunReward, address feeAddress);
+    event MigrationComplete(uint256 balance, uint256 tokenLength);
+    event MigrationVariablesUpdated(
+        uint256 creationFee,
+        uint256 feePercent,
+        uint256 creatorReward,
+        uint256 baseFunReward,
+        address feeAddress,
+        bool paused,
+        address[] admin
+    );
 
-    address private owner;
-    Factory private factory;
-    address private _feeTo;
-    uint256 private fee;
-    uint private constant lpFee = 5;
-    address private constant WVLX = 0xc579D1f3CF86749E05CD06f7ADe17856c2CE3126;
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
-
-    struct Token {
-        address creator;
-        address token;
-        address pair;
-        Data data;
-        string description;
-        string image;
-        string twitter;
-        string telegram;
-        string website;
-        bool trading;
-<<<<<<< HEAD
-        bool tradingOnUniswap;
-=======
-        bool tradingOnWagyuSwap;
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
-    }
-
-    struct Data {
-        address token;
-        string name;
-        string ticker;
-        uint256 supply;
-        uint256 price;
-        uint256 marketCap;
-<<<<<<< HEAD
-        uint256 liquidity;
-        uint256 _liquidity;
-        uint256 volume;
-        uint256 volume24H;
-        uint256 prevPrice;
-        uint256 lastUpdated;
-    }
-
-    mapping (address => Profile) public profile;
-
-    Profile[] public profiles;
-
-    mapping (address => Token) public token;
-
-    Token[] public tokens;
-
-    event Launched(address indexed token, address indexed pair, uint);
-
-    event Deployed(address indexed token, uint256 amount0, uint256 amount1);
-
-    constructor(address factory_, address router_, address fee_to, uint256 _fee) {
-        owner = msg.sender;
-
-        require(factory_ != address(0), "Zero addresses are not allowed.");
-        require(router_ != address(0), "Zero addresses are not allowed.");
-        require(fee_to != address(0), "Zero addresses are not allowed.");
-    
-        factory = Factory(factory_);
-
-        router = Router(router_);
-
-        _feeTo = fee_to;
-
-        fee = (_fee * 1 ether) / 1000;
-
-        uniswapV2Router = IUniswapV2Router02(0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24);
-=======
-    }
-
-    mapping(address => Token) public token;
-    Token[] public tokens;
-
-    event Launched(address indexed token, address indexed pair, uint);
-    event Deployed(address indexed token, uint256 amount0, uint256 amount1);
-
-    constructor(address factory_, address fee_to, uint256 _fee) {
-        owner = msg.sender;
-        require(factory_ != address(0), "Zero addresses are not allowed.");
-        require(fee_to != address(0), "Zero addresses are not allowed.");
-
-        factory = Factory(factory_);
-        _feeTo = fee_to;
-        fee = (_fee * 1 ether) / 1000;
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
-    }
-
-    modifier onlyOwner {
-        require(msg.sender == owner, "Only the owner can call this function.");
-<<<<<<< HEAD
-
+    modifier onlyAdmin() {
+        require(isAdmin(msg.sender), "Caller is not an admin");
         _;
     }
 
-    function createUserProfile(address _user) private returns (bool) {
-        require(_user != address(0), "Zero addresses are not allowed.");
-
-        Token[] memory _tokens;
-
-        Profile memory _profile = Profile({
-            user: _user,
-            tokens: _tokens
-        });
-
-        profile[_user] = _profile;
-
-        profiles.push(_profile);
-
-        return true;
-    }
-
-    function checkIfProfileExists(address _user) private view returns (bool) {
-        require(_user != address(0), "Zero addresses are not allowed.");
-
-        bool exists = false;
-
-        for(uint i = 0; i < profiles.length; i++) {
-            if(profiles[i].user == _user) {
-                return true;
-            }
-        }
-
-        return exists;
-    }
-
-    function _approval(address _user, address _token, uint256 amount) private returns (bool) {
-        require(_user != address(0), "Zero addresses are not allowed.");
-        require(_token != address(0), "Zero addresses are not allowed.");
-
-        ERC20 token_ = ERC20(_token);
-
-        token_.approve(_user, amount);
-
-        return true;
-    }
-
-    function approval(address _user, address _token, uint256 amount) external nonReentrant returns (bool) {
-        bool approved = _approval(_user, _token, amount);
-
-        return approved;
-    }
-
-=======
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
         _;
     }
 
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
-    function launchFee() public view returns (uint256) {
-        return fee;
+    constructor() Ownable(msg.sender) {
+        admin.push(msg.sender);
+        feeAddress = msg.sender;
+        uniswapV2Router = IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
     }
 
-    function updateLaunchFee(uint256 _fee) public returns (uint256) {
-        fee = _fee;
-<<<<<<< HEAD
-
-=======
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
-        return _fee;
-    }
-
-    function liquidityFee() public pure returns (uint256) {
-        return lpFee;
-    }
-
-    function feeTo() public view returns (address) {
-        return _feeTo;
-    }
-
-    function feeToSetter() public view returns (address) {
-        return owner;
-    }
-
-<<<<<<< HEAD
-    function setFeeTo(address fee_to) public onlyOwner{
-        require(fee_to != address(0), "Zero addresses are not allowed.");
-
-        _feeTo = fee_to;
-    }
-
-    function marketCapLimit() public pure returns (uint256) {
-        return mcap;
-    }
-
-    function getUserTokens() public view returns (Token[] memory) {
-        require(checkIfProfileExists(msg.sender), "User Profile dose not exist.");
-
-        Profile memory _profile = profile[msg.sender];
-
-        return _profile.tokens;
-    }
-
-=======
-    function setFeeTo(address fee_to) public onlyOwner {
-        require(fee_to != address(0), "Zero addresses are not allowed.");
-        _feeTo = fee_to;
-    }
-
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
-    function getTokens() public view returns (Token[] memory) {
-        return tokens;
-    }
-
-    function launch(string memory _name, string memory _ticker, string memory desc, string memory img, string[3] memory urls, uint256 _supply, uint maxTx) public payable nonReentrant returns (address, address, uint) {
-        require(msg.value >= fee, "Insufficient amount sent.");
-
-        ERC20 _token = new ERC20(_name, _ticker, _supply, maxTx);
-<<<<<<< HEAD
-
-        address weth = router.WETH();
-
-        address _pair = factory.createPair(address(_token), weth);
-=======
-        address _pair = factory.createPair(address(_token), WVLX);
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
-
-        Pair pair_ = Pair(payable(_pair));
-
-        uint256 supply = _supply * 10 ** _token.decimals();
-<<<<<<< HEAD
-
-        bool approved = _approval(address(router), address(_token), supply);
-        require(approved);
-
-        uint256 liquidity = (lpFee * msg.value) / 100;
-        uint256 value = msg.value - liquidity;
-
-        router.addLiquidityETH{value: liquidity}(address(_token), supply);
-=======
-        uint256 value = msg.value;
-
-        // Mint tokens dynamically
-        uint256 requiredTokens = supply - _token.balanceOf(address(this));
-        if (requiredTokens > 0) {
-            _token.mint(address(this), requiredTokens); // Mint tokens as needed
+    function isAdmin(address user) public view returns (bool) {
+        for (uint256 i = 0; i < admin.length; i ++) {
+            if (admin[i] == user) return true;
         }
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
+        return false;
+    }
 
-        Data memory _data = Data({
-            token: address(_token),
-            name: _name,
-            ticker: _ticker,
-            supply: supply,
-<<<<<<< HEAD
-            price: supply / pair_.MINIMUM_LIQUIDITY(),
-            marketCap: pair_.MINIMUM_LIQUIDITY(),
-            liquidity: liquidity * 2,
-            _liquidity: pair_.MINIMUM_LIQUIDITY() * 2,
-            volume: 0,
-            volume24H: 0,
-            prevPrice: supply / pair_.MINIMUM_LIQUIDITY(),
-            lastUpdated: block.timestamp
-=======
-            price: pair_.calculateAmountOut(0, false), // Get initial price from Pair
-            marketCap: pair_.calculateAmountOut(0, false) * supply
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
-        });
+    function updateVariables(
+        bool _paused, 
+        address[] calldata _admin, 
+        uint256 _creationFee,
+        uint256 _feePercent,
+        uint256 _creatorReward,
+        uint256 _baseFunReward,
+        uint256 _graduationMarketCap,
+        address memory _feeAddress
+    ) external onlyAdmin {
+        require(_feePercent <= 100, "Invalid transaction fee");
+        paused = _paused;
 
-        Token memory token_ = Token({
+        delete admin;
+
+        for (uint256 i = 0; i < _admin.length; i++) {
+            address adminAddress = _admin[i];
+            require(adminAddress != address(0), "Invalid admin address");
+            admin.push(adminAddress);
+        }
+        CREATION_FEE = _creationFee * 1 ether;
+        feePercent = _feePercent;
+        creatorReward = _creatorReward * 1 ether;
+        baseFunReward = _baseFunReward * 1 ether;
+        GRADUATION_MARKET_CAP = _graduationMarketCap * 1 ether;
+        feeAddress = _feeAddress;
+
+        emit VariablesUpdated(paused, admin, CREATION_FEE, feePercent, creatorReward, baseFunReward, feeAddress);
+    }
+
+    function transferFee(uint256 amount) internal {
+        uint256 feeAmount = (amount * feePercent) / 100;
+        payable(feeAddress).transfer(feeAmount);
+    }
+
+    function createToken(
+        string memory name,
+        string memory symbol,
+        string memory description,
+        string memory image,
+        string memory twitter,
+        string memory telegram,
+        string memory website,
+        string memory metadataURI,
+        uint256 vlxAmount
+    ) external payable whenNotPaused {
+        require(msg.value >= CREATION_FEE + vlxAmount, "Insufficient value");
+
+        transferFee(CREATION_FEE);
+
+        Memecoin token = new Memecoin(name, symbol, metadataURI, msg.sender);
+        tokens[address(token)] = TokenInfo({
+            tokenAddress: address(token),
             creator: msg.sender,
-            token: address(_token),
-            pair: _pair,
-            data: _data,
-            description: desc,
-            image: img,
-            twitter: urls[0],
-            telegram: urls[1],
-            website: urls[2],
-            trading: true,
-<<<<<<< HEAD
-            tradingOnUniswap: false
+            description: description,
+            image: image,
+            twitter: twitter,
+            telegram: telegram,
+            website: website,
+            totalSold: 0,
+            totalRevenue: 0,
+            totalSupply: 0,
+            tradingOnUniswap: false,
+            tradingPaused: false
         });
+        tokenList.push(address(token));
 
-        token[address(_token)] = token_;
+        uint256 remainingAmount = msg.value - CREATION_FEE;
+        uint256 feeAmount = (remainingAmount * feePercent) / 100;
+        uint256 effectiveAmount = remainingAmount - feeAmount;
 
-        tokens.push(token_);
+        transferFee(remainingAmount);
 
-        bool exists = checkIfProfileExists(msg.sender);
+        TokenInfo storage tokenInfo = tokens[address(token)];
+        uint256 price = getTokenPrice(tokenInfo.totalSold);
 
-        if(exists) {
-            Profile storage _profile = profile[msg.sender];
+        uint256 tokensToBuy = effectiveAmount / price;
+        uint256 tokenBalance = Memecoin(address(token)).balanceOf(address(this));
 
-            _profile.tokens.push(token_);
+        require(tokensToBuy <= tokenBalance, "Not enough tokens available");
+
+        Memecoin(address(token)).transfer(msg.sender, tokensToBuy);
+
+        tokenInfo.totalSold += effectiveAmount;
+        tokenInfo.totalRevenue += effectiveAmount;
+        tokenInfo.totalSupply += tokensToBuy;
+        
+        price = getTokenPrice(tokenInfo.totalSold);
+        emit TokenCreated(address(token), msg.sender, name, symbol, vlxAmount, price, tokenInfo.totalSupply, tokenInfo.totalSold);
+    }
+
+    function buyTokens(address tokenAddress, uint256 vlxAmount) external payable nonReentrant whenNotPaused {
+        require(!tokens[tokenAddress].tradingPaused, "Trading is currently paused for this token");
+        require(tokens[tokenAddress].tokenAddress != address(0), "Token not found");
+        require(msg.value == vlxAmount, "SOL amount mismatch");
+
+        uint256 feeAmount = (msg.value * feePercent) / 100;
+        uint256 effectiveAmount = msg.value - feeAmount;
+
+        transferFee(msg.value);
+
+        TokenInfo storage tokenInfo = tokens[tokenAddress];
+
+        if (tokenInfo.tradingOnUniswap) {
+            _buyTokensOnUniswap(tokenAddress, vlxAmount);
         } else {
-            bool created = createUserProfile(msg.sender);
+            uint256 price = getTokenPrice(tokenInfo.totalSold);
+            uint256 tokensToBuy = effectiveAmount / price;
+            uint256 tokenBalance = Memecoin(tokenAddress).balanceOf(address(this));
 
-            if(created) {
-                Profile storage _profile = profile[msg.sender];
+            require(tokensToBuy <= tokenBalance, "Not enough tokens available");
 
-                _profile.tokens.push(token_);
+            Memecoin(tokenAddress).transfer(msg.sender, tokensToBuy);
+
+            tokenInfo.totalSold += effectiveAmount;
+            tokenInfo.totalRevenue += effectiveAmount;
+            tokenInfo.totalSupply += tokensToBuy;
+
+            price = getTokenPrice(tokenInfo.totalSold);
+
+            _checkForGraduation(tokenAddress);
+            emit TokenPurchased(msg.sender, tokenAddress, vlxAmount, price, tokenInfo.totalSupply, tokenInfo.totalSold);
+        }
+    }
+
+    function sellTokens(address tokenAddress, uint256 tokenAmount) external nonReentrant whenNotPaused {
+        require(!tokens[tokenAddress].tradingPaused, "Trading is currently paused for this token");
+        require(tokens[tokenAddress].tokenAddress != address(0), "Token not found");
+
+        TokenInfo storage tokenInfo = tokens[tokenAddress];
+
+        if (tokenInfo.tradingOnUniswap) {
+            _sellTokensOnUniswap(tokenAddress, tokenAmount);
+        } else {
+            uint256 price = getTokenPrice(tokenInfo.totalSold);
+            uint256 refund = tokenAmount * price;
+            require(address(this).balance >= refund, "Not enough SOL in contract");
+
+            uint256 feeAmount = (refund * feePercent) / 100;
+            uint256 effectiveRefund = refund - feeAmount;
+
+            transferFee(refund);
+
+            uint256 allowance = Memecoin(tokenAddress).allowance(msg.sender, address(this));
+            if (allowance < tokenAmount) {
+                Memecoin(tokenAddress).approve(address(this), tokenAmount);
             }
+            bool success = Memecoin(tokenAddress).transferFrom(msg.sender, address(this), tokenAmount);
+            require(success, "Token transfer failed");
+
+            tokenInfo.totalSold -= effectiveRefund;
+            tokenInfo.totalRevenue -= effectiveRefund;
+            tokenInfo.totalSupply -= tokenAmount;
+
+            payable(msg.sender).transfer(effectiveRefund);
+
+            price = getTokenPrice(tokenInfo.totalSold);
+
+            _checkForGraduation(tokenAddress);
+            emit TokenSold(msg.sender, tokenAddress, tokenAmount, price, tokenInfo.totalSupply, tokenInfo.totalSold);
         }
-
-=======
-            tradingOnWagyuSwap: false
-        });
-
-        token[address(_token)] = token_;
-        tokens.push(token_);
-
-        // Transfer fee
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
-        (bool os, ) = payable(_feeTo).call{value: value}("");
-        require(os);
-
-        uint n = tokens.length;
-
-        emit Launched(address(_token), _pair, n);
-
-        return (address(_token), _pair, n);
     }
 
-<<<<<<< HEAD
-    function swapTokensForETH(uint256 amountIn, address tk, address to, address referree) public returns (bool) {
-        require(tk != address(0), "Zero addresses are not allowed.");
-        require(to != address(0), "Zero addresses are not allowed.");
-        require(referree != address(0), "Zero addresses are not allowed.");
-
-        ERC20 token_ = ERC20(tk);
-        require(token_.allowance(msg.sender, address(this)) >= amountIn, "allowance too low");
-        token_.transferFrom(msg.sender, address(this), amountIn);
-
-        address _pair = factory.getPair(tk, router.WETH());
-
-        Pair pair = Pair(payable(_pair));
-
-        bool approved = _approval(address(router), tk, amountIn);
-        require(approved, "not approved");
-
-        (uint256 reserveA, uint256 reserveB , uint256 _reserveB) = pair.getReserves();
-
-        (uint256 amount0In, uint256 amount1Out) = router.swapTokensForETH(amountIn, tk, to, referree);
-
-        uint256 newReserveA = reserveA + amount0In;
-        uint256 newReserveB = reserveB - amount1Out;
-        uint256 _newReserveB = _reserveB - amount1Out;
-        uint256 duration = block.timestamp - token[tk].data.lastUpdated;
-
-        uint256 _liquidity = _newReserveB * 2;
-        uint256 liquidity = newReserveB * 2;
-        uint256 mCap = (token[tk].data.supply * _newReserveB) / newReserveA;
-        uint256 price = newReserveA / _newReserveB;
-        uint256 volume = duration > 86400 ? amount1Out : token[tk].data.volume24H + amount1Out;
-        uint256 _price = duration > 86400 ? token[tk].data.price : token[tk].data.prevPrice;
-
-        token[tk].data.price = price;
-        token[tk].data.marketCap = mCap;
-        token[tk].data.liquidity = liquidity;
-        token[tk].data._liquidity = _liquidity;
-        token[tk].data.volume = token[tk].data.volume + amount1Out;
-        token[tk].data.volume24H = volume;
-        token[tk].data.prevPrice = _price;
-        
-        if(duration > 86400) {
-            token[tk].data.lastUpdated = block.timestamp;
+    function _checkForGraduation(address tokenAddress) private {
+        TokenInfo storage tokenInfo = tokens[tokenAddress];
+        uint256 price = getTokenPrice(tokenInfo.totalSold);
+        uint256 marketCap = 1_000_000_000 * price;
+        if (marketCap >= GRADUATION_MARKET_CAP && !tokenInfo.tradingOnUniswap) {
+            _graduateToUniswap(tokenAddress);
+            tokenInfo.graduatedToUniswap = true;
+            tokenInfo.uniswapPair = IUniswapV2Factory(uniswapV2Router.factory()).getPair(tokenAddress, uniswapV2Router.WETH());
         }
-
-        for (uint i = 0; i < tokens.length; i++) {
-            if(tokens[i].token == tk) {
-                tokens[i].data.price = price;
-                tokens[i].data.marketCap = mCap;
-                tokens[i].data.liquidity = liquidity;
-                tokens[i].data._liquidity = _liquidity;
-                tokens[i].data.volume = token[tk].data.volume + amount1Out;
-                tokens[i].data.volume24H = volume;
-                tokens[i].data.prevPrice = _price;
-
-                if(duration > 86400) {
-                    tokens[i].data.lastUpdated = block.timestamp;
-                }
-            }
-        }
-
-        return true;
     }
 
-    function swapETHForTokens(address tk, address to, address referree) public payable returns (bool) {
-        require(tk != address(0), "Zero addresses are not allowed.");
-        require(to != address(0), "Zero addresses are not allowed.");
-        require(referree != address(0), "Zero addresses are not allowed.");
+    function _graduateToUniswap(address tokenAddress) private {
+        TokenInfo storage tokenInfo = tokens[tokenAddress];
+        tokenInfo.tradingPaused = true;
 
-        address _pair = factory.getPair(tk, router.WETH());
+        Memecoin token = Memecoin(tokenAddress);
+        uint256 tokenBalance = token.balanceOf(address(this));
+        token.approve(address(uniswapV2Router), tokenBalance);
 
-        Pair pair = Pair(payable(_pair));
+        uint256 totalSold = tokenInfo.totalSold;
+        payable(tokenInfo.creator).transfer(creatorReward);
+        payable(feeAddress).transfer(baseFunReward);
+        uint256 remainingAmount = totalSold - creatorReward - baseFunReward;
 
-        (uint256 reserveA, uint256 reserveB , uint256 _reserveB) = pair.getReserves();
-
-        (uint256 amount1In, uint256 amount0Out) = router.swapETHForTokens{value: msg.value}(tk, to, referree);
-
-        uint256 newReserveA = reserveA - amount0Out;
-        uint256 newReserveB = reserveB + amount1In;
-        uint256 _newReserveB = _reserveB + amount1In;
-        uint256 duration = block.timestamp - token[tk].data.lastUpdated;
-
-        uint256 _liquidity = _newReserveB * 2;
-        uint256 liquidity = newReserveB * 2;
-        uint256 mCap = (token[tk].data.supply * _newReserveB) / newReserveA;
-        uint256 price = newReserveA / _newReserveB;
-        uint256 volume = duration > 86400 ? amount1In : token[tk].data.volume24H + amount1In;
-        uint256 _price = duration > 86400 ? token[tk].data.price : token[tk].data.prevPrice;
-
-        token[tk].data.price = price;
-        token[tk].data.marketCap = mCap;
-        token[tk].data.liquidity = liquidity;
-        token[tk].data._liquidity = _liquidity;
-        token[tk].data.volume = token[tk].data.volume + amount1In;
-        token[tk].data.volume24H = volume;
-        token[tk].data.prevPrice = _price;
-        
-        if(duration > 86400) {
-            token[tk].data.lastUpdated = block.timestamp;
-        }
-
-        for (uint i = 0; i < tokens.length; i++) {
-            if(tokens[i].token == tk) {
-                tokens[i].data.price = price;
-                tokens[i].data.marketCap = mCap;
-                tokens[i].data.liquidity = liquidity;
-                tokens[i].data._liquidity = _liquidity;
-                tokens[i].data.volume = token[tk].data.volume + amount1In;
-                tokens[i].data.volume24H = volume;
-                tokens[i].data.prevPrice = _price;
-
-                if(duration > 86400) {
-                    tokens[i].data.lastUpdated = block.timestamp;
-                }
-            }
-        }
-
-        return true;
-    }
-
-    function deploy(address tk) public onlyOwner nonReentrant {
-        require(tk != address(0), "Zero addresses are not allowed.");
-
-        address weth = router.WETH();
-
-        address pair = factory.getPair(tk, weth);
-
-        ERC20 token_ = ERC20(tk);
-
-        token_.excludeFromMaxTx(pair);
-
-        Token storage _token = token[tk];
-
-        (uint256 amount0, uint256 amount1) = router.removeLiquidityETH(tk, 100, address(this));
-
-        Data memory _data = Data({
-            token: tk,
-            name: token[tk].data.name,
-            ticker: token[tk].data.ticker,
-            supply: token[tk].data.supply,
-            price: 0,
-            marketCap: 0,
-            liquidity: 0,
-            _liquidity: 0,
-            volume: 0,
-            volume24H: 0,
-            prevPrice: 0,
-            lastUpdated: block.timestamp
-        });
-
-        _token.data = _data;
-
-        for (uint i = 0; i < tokens.length; i++) {
-            if(tokens[i].token == tk) {
-                tokens[i].data = _data;
-            }
-        }
-
-        openTradingOnUniswap(tk);
-
-        _token.trading = false;
-        _token.tradingOnUniswap = true;
-
-        emit Deployed(tk, amount0, amount1);
-    }
-
-    function openTradingOnUniswap(address tk) private {
-        require(tk != address(0), "Zero addresses are not allowed.");
-
-        ERC20 token_ = ERC20(tk);
-
-        Token storage _token = token[tk];
-
-        require(_token.trading && !_token.tradingOnUniswap, "trading is already open");
-
-        bool approved = _approval(address(uniswapV2Router), tk, token_.balanceOf(address(this)));
-        require(approved, "Not approved.");
-
-        address uniswapV2Pair = IUniswapV2Factory(uniswapV2Router.factory()).createPair(tk, uniswapV2Router.WETH());
-
-        uniswapV2Router.addLiquidityETH{value: address(this).balance}(
-=======
-    function getToken(address tk) public view returns (Token memory) {
-        return token[tk];
-    }
-
-    function _deploy(address tk) private {
-        require(tk != address(0), "Zero addresses are not allowed.");
-
-        // Transfer 30,000 VLX deployment fee
-        IERC20 wvlxToken = IERC20(WVLX);
-        require(wvlxToken.transferFrom(msg.sender, owner, 30_000 * 10 ** 18), "Failed to transfer VLX deployment fee");
-
-        openTradingOnWagyuSwap(tk);
-    }
-
-    function openTradingOnWagyuSwap(address tk) private {
-        require(tk != address(0), "Zero addresses are not allowed.");
-
-        ERC20 token_ = ERC20(tk);
-        Token storage _token = token[tk];
-
-        require(_token.trading && !_token.tradingOnWagyuSwap, "Trading is already open");
-
-        // Dynamic minting can be added here if more tokens are needed for liquidity
-
-        address wagyuSwapPair = IWagyuSwapFactory(IWagyuSwapRouter02(0x0000000000000000000000000000000000000000).factory()).createPair(tk, WVLX);
-
-        IWagyuSwapRouter02(0x0000000000000000000000000000000000000000).addLiquidityETH{value: address(this).balance}(
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
-            tk,
-            token_.balanceOf(address(this)),
+        uniswapV2Router.addLiquidityETH{value: remainingAmount}(
+            tokenAddress,
+            tokenBalance,
             0,
             0,
             address(this),
             block.timestamp
         );
 
-<<<<<<< HEAD
-        ERC20(uniswapV2Pair).approve(address(uniswapV2Router), type(uint).max);
+        tokenInfo.tradingPaused = false;
     }
-}
-=======
-        IERC20(wagyuSwapPair).approve(address(0x0000000000000000000000000000000000000000), type(uint).max);
+
+    function _buyTokensOnUniswap(address tokenAddress, uint256 vlxAmount) private {
+        address[] memory path = new address[](2);
+        path[0] = uniswapV2Router.WETH();
+        path[1] = tokenAddress;
+
+        uint256[] memory amounts = uniswapV2Router.getAmountsOut(vlxAmount, path);
+        require(amounts[1] > 0, "Insufficient output amount");
+
+        uniswapV2Router.swapExactETHForTokensSupportingFeeOnTransferTokens{value: vlxAmount}(
+            amounts[1] * 98 / 100,
+            path,
+            msg.sender,
+            block.timestamp
+        );
     }
+
+    function _sellTokensOnUniswap(address tokenAddress, uint256 tokenAmount) private {
+        address[] memory path = new address[](2);
+        Memecoin token = Memecoin(tokenAddress);
+        token.approve(address(uniswapV2Router), tokenAmount);
+
+        address;
+        path[0] = tokenAddress;
+        path[1] = uniswapV2Router.WETH();
+
+        uint256[] memory amounts = uniswapV2Router.getAmountsOut(tokenAmount, path);
+        require(amounts[1] > 0, "Insufficient output amount");
+
+        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            tokenAmount,
+            amounts[1] * 98 / 100,
+            path,
+            msg.sender,
+            block.timestamp
+        );
+    }
+
+    function getToken(address token) external view returns (TokenInfo memory) {
+        return tokens[token];
+    }
+
+    function getTokenList() external view returns (address[] memory) {
+        return tokenList;
+    }
+
+    function getTokenPrice(uint256 totalSold) public pure returns (uint256) {
+        if (totalSold == 0) return INITIAL_VIRTUAL_VLX / INITIAL_VIRTUAL_TOKENS;
+        uint256 y = INITIAL_VIRTUAL_TOKENS - K / (INITIAL_VIRTUAL_VLX + totalSold);
+        return totalSold / y;
+    }
+
+    function withdraw() external onlyOwner {
+        payable(owner()).transfer(address(this).balance);
+    }
+
+    function migrate(address payable newPlatform) external onlyOwner {
+        require(newPlatform != address(0), "Invaild new platform address");
+        uint256 balance = address(this).balance;
+        if (balance > 0) newPlatform.transfer(balance);
+
+        for (uint256 i = 0; i < tokenList.length; i ++) {
+            address tokenAddress = tokenList[i];
+            uint256 balanceToken = Memecoin(tokenAddress).balanceOf(address(this));
+            
+            if (balanceToken > 0) {
+                Memecoin(tokenAddress).transfer(newPlatform, balanceToken);
+            }
+        }
+
+        IBaseFunPlatform(newPlatform).setMigrationVariables(
+            CREATION_FEE,
+            feePercent,
+            creatorReward,
+            baseFunReward,
+            feeAddress,
+            paused,
+            admin
+        );
+    }
+
+    function confirmMigration(
+        address oldPlatformAddress
+    ) external onlyOwner {
+        IBaseFunPlatform oldPlatform = IBaseFunPlatform(oldPlatformAddress);
+        address[] memory tokenAddresses = oldPlatform.getTokenList();
+
+        for (uint256 i = 0; i < tokenAddresses.length; i ++) {
+            address tokenAddress = tokenAddresses[i];
+            uint256 balance = Memecoin(tokenAddress).balanceOf(address(this));
+            require(balance > 0, "Token not transferred");
+            
+            tokens[tokenAddress] = oldPlatform.getToken(tokenAddress);
+
+            tokenList.push(tokenAddress);
+        }
+
+        uint256 nativeBalance = address(this).balance;
+        emit MigrationComplete(nativeBalance, tokenAddresses.length);
+    }
+
+    function setMigrationVariables(
+        uint256 _creationFee,
+        uint256 _feePercent,
+        uint256 _creatorReward,
+        uint256 _baseFunReward,
+        address _feeAddress,
+        bool _paused,
+        address[] memory _admin
+    ) external onlyOwner {
+        CREATION_FEE = _creationFee;
+        feePercent = _feePercent;
+        creatorReward = _creatorReward;
+        baseFunReward = _baseFunReward;
+        feeAddress = _feeAddress;
+        paused = _paused;
+
+        delete admin; // Clear current admin list
+        for (uint256 i = 0; i < _admin.length; i++) {
+            admin.push(_admin[i]);
+        }
+
+        emit MigrationVariablesUpdated(
+            _creationFee,
+            _feePercent,
+            _creatorReward,
+            _baseFunReward,
+            _feeAddress,
+            _paused,
+            _admin
+        );
+    }
+
+    receive() external payable {}
 }
->>>>>>> e818f533913de5594c4c0aeea1ac5954298ac201
