@@ -38,14 +38,18 @@ module.exports = {
       url: `${MAINNET_API_URL}`,
       accounts: [`0x${PRIVATE_KEY}`]
     },
+    holesky: {
+      url: 'https://holesky.infura.io/v3/6b924f80484d46ff9ce72bb66ed50bbc',
+      accounts: [`0x${PRIVATE__KEY}`, `0x${PRIVATE_KEY}`]
+    },
     base_mainnet: {
       url: 'https://mainnet.base.org',
       accounts: [`0x${PRIVATE_KEY}`],
       gasPrice: 1000000000,
     },
     base_sepolia: {
-      url: 'https://sepolia.base.org',
-      accounts: [`0x${PRIVATE__KEY}`],
+      url: 'https://base-sepolia.infura.io/v3/6b924f80484d46ff9ce72bb66ed50bbc',
+      accounts: [`0x${PRIVATE_KEY}`],
       gasPrice: 1000000000,
     },
     velas_testnet: { url: `https://api.testnet.velas.com`, accounts: [`0x${PRIVATE_KEY}`] },

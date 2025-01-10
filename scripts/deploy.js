@@ -4,8 +4,8 @@ async function main() {
   const [deployer] = await hre.ethers.getSigners(); // Get the deployer account
 
   console.log("Deploying contracts with the account:", deployer.address);
-  const Factory = await hre.ethers.getContractFactory("VelasFunPlatform");
-  const factory = await Factory.deploy(); // Use deployer as feeTo for now
+  const Factory = await hre.ethers.getContractFactory("BaseFunPlatform");
+  const factory = await Factory.deploy('0xF19Ac4f314B7eEB29fF74e9c379A375065a44B51'); // Use deployer as feeTo for now
   await factory.waitForDeployment();
   console.log("Factory deployed to:", await factory.getAddress());
   // Deploy Factory
