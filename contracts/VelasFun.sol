@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./Memecoin.sol";
 
 struct TokenInfo {
@@ -27,24 +28,15 @@ struct TokenInfo {
 interface IBaseFunPlatform {
     function getTokenList() external view returns (address[] memory);
     function getToken(address token) external view returns (TokenInfo memory);
-    function setMigrationVariables(
-        uint256 _creationFee,
-        uint256 _feePercent,
-        uint256 _creatorReward,
-        uint256 _baseFunReward,
-        address _feeAddress,
-        bool _paused,
-        address[] memory _admin
-    ) external;
 }
 
 contract BaseFunPlatform is Ownable, ReentrancyGuard {
     using Address for address;
-    uint256 public CREATION_FEE = 0.0007 ether;
+    uint256 public CREATION_FEE = 0.0003 ether;
     uint256 private feePercent = 1;
     uint256 private creatorReward = 0 ether;
     uint256 private baseFunReward = 0 ether;
-    uint256 private GRADUATION_MARKET_CAP = 1.75 ether;
+    uint256 private GRADUATION_MARKET_CAP = 0.9 ether;
     address private feeAddress;
 
     bool private paused = false;
@@ -182,26 +174,28 @@ contract BaseFunPlatform is Ownable, ReentrancyGuard {
         tokenList.push(address(token));
 
         uint256 remainingAmount = msg.value - CREATION_FEE;
-        uint256 feeAmount = (remainingAmount * feePercent) / 100;
-        uint256 effectiveAmount = remainingAmount - feeAmount;
-
-        transferFee(remainingAmount);
-
+            
         TokenInfo storage tokenInfo = tokens[address(token)];
-        uint256 price = INITIAL_VIRTUAL_ETH / INITIAL_VIRTUAL_TOKENS;
 
-        uint256 tokensToBuy = getTokenPrice(effectiveAmount);
-        uint256 tokenBalance = Memecoin(address(token)).balanceOf(address(this));
+        if (remainingAmount > 0) {
+            uint256 feeAmount = (remainingAmount * feePercent) / 100;
+            uint256 effectiveAmount = remainingAmount - feeAmount;
 
-        require(tokensToBuy <= tokenBalance, "Not enough tokens available");
+            transferFee(remainingAmount);
 
-        Memecoin(address(token)).transfer(msg.sender, tokensToBuy);
+            uint256 tokensToBuy = getTokenAmount(effectiveAmount);
+            uint256 tokenBalance = Memecoin(address(token)).balanceOf(address(this));
 
-        tokenInfo.totalSold += effectiveAmount;
-        tokenInfo.totalRevenue += effectiveAmount;
-        tokenInfo.totalSupply += tokensToBuy;
+            require(tokensToBuy <= tokenBalance, "Not enough tokens available");
+
+            Memecoin(address(token)).transfer(msg.sender, tokensToBuy);
+
+            tokenInfo.totalSold += effectiveAmount;
+            tokenInfo.totalRevenue += effectiveAmount;
+            tokenInfo.totalSupply += tokensToBuy;
+        }
         
-        if (tokenInfo.totalSupply > 0) price = tokenInfo.totalSold / tokenInfo.totalSupply;
+        uint256 price = getTokenPrice(tokenInfo.totalSold);
 
         _checkForGraduation(address(token));
         emit TokenCreated(address(token), msg.sender, name, symbol, description, image, twitter, telegram, website, ethAmount, price, tokenInfo.totalSupply, tokenInfo.totalSold);
@@ -218,14 +212,11 @@ contract BaseFunPlatform is Ownable, ReentrancyGuard {
         transferFee(msg.value);
 
         TokenInfo storage tokenInfo = tokens[tokenAddress];
-        
-        uint256 price = INITIAL_VIRTUAL_ETH / INITIAL_VIRTUAL_TOKENS;
 
         if (tokenInfo.tradingOnUniswap) {
             _buyTokensOnUniswap(tokenAddress, ethAmount);
         } else {
-            if (tokenInfo.totalSupply > 0) price = tokenInfo.totalSold / tokenInfo.totalSupply;
-            uint256 tokensToBuy = getTokenPrice(tokenInfo.totalSold + effectiveAmount) - tokenInfo.totalSupply;
+            uint256 tokensToBuy = getTokenAmount(tokenInfo.totalSold + effectiveAmount) - tokenInfo.totalSupply;
             uint256 tokenBalance = Memecoin(tokenAddress).balanceOf(address(this));
 
             require(tokensToBuy <= tokenBalance, "Not enough tokens available");
@@ -236,29 +227,25 @@ contract BaseFunPlatform is Ownable, ReentrancyGuard {
             tokenInfo.totalRevenue += effectiveAmount;
             tokenInfo.totalSupply += tokensToBuy;
 
-            price = tokenInfo.totalSold / tokenInfo.totalSupply;
-
             _checkForGraduation(tokenAddress);
         }
+
+        uint256 price = getTokenPrice(tokenInfo.totalSold);
         emit TokenPurchased(msg.sender, tokenAddress, ethAmount, price, tokenInfo.totalSupply, tokenInfo.totalSold);
     }
 
     function sellTokens(address tokenAddress, uint256 tokenAmount) external nonReentrant whenNotPaused {
         require(!tokens[tokenAddress].tradingPaused, "Trading is currently paused for this token");
         require(tokens[tokenAddress].tokenAddress != address(0), "Token not found");
-        require(tokens[tokenAddress].totalSupply > tokenAmount, "Unexpected error is occurred when selling");
+        require(tokens[tokenAddress].totalSupply >= tokenAmount, "Unexpected error is occurred when selling");
 
         TokenInfo storage tokenInfo = tokens[tokenAddress];
-
-        uint256 price = INITIAL_VIRTUAL_ETH / INITIAL_VIRTUAL_TOKENS;
 
         if (tokenInfo.tradingOnUniswap) {
             bool success = Memecoin(tokenAddress).transferFrom(msg.sender, address(this), tokenAmount);
             require(success, "Token transfer failed");
             _sellTokensOnUniswap(tokenAddress, tokenAmount);
         } else {
-            if (tokenInfo.totalSupply > 0) price = tokenInfo.totalSold / tokenInfo.totalSupply;
-            
             uint256 haveToRemainETH = getTokenETHAmount(tokenInfo.totalSupply - tokenAmount);
             uint256 refund = tokenInfo.totalSold - haveToRemainETH;
             
@@ -280,19 +267,17 @@ contract BaseFunPlatform is Ownable, ReentrancyGuard {
 
             payable(msg.sender).transfer(effectiveRefund);
 
-            price = INITIAL_VIRTUAL_ETH / INITIAL_VIRTUAL_TOKENS;
-            if (tokenInfo.totalSupply > 0) price = tokenInfo.totalSold / tokenInfo.totalSupply;
-
             _checkForGraduation(tokenAddress);
         }
+
+        uint256 price = getTokenPrice(tokenInfo.totalSold);
         emit TokenSold(msg.sender, tokenAddress, tokenAmount, price, tokenInfo.totalSupply, tokenInfo.totalSold);
     }
 
     function _checkForGraduation(address tokenAddress) private {
         TokenInfo storage tokenInfo = tokens[tokenAddress];
 
-        uint256 price = INITIAL_VIRTUAL_ETH / INITIAL_VIRTUAL_TOKENS;
-        if (tokenInfo.totalSupply > 0) price = tokenInfo.totalSold / tokenInfo.totalSupply;
+        uint256 price = getTokenPrice(tokenInfo.totalSold);
         uint256 marketCap = 1_000_000_000_000_000 * price;
         if (marketCap >= GRADUATION_MARKET_CAP && !tokenInfo.tradingOnUniswap) {
             _graduateToUniswap(tokenAddress);
@@ -376,9 +361,15 @@ contract BaseFunPlatform is Ownable, ReentrancyGuard {
         return tokenList;
     }
 
-    function getTokenPrice(uint256 totalSold) public pure returns (uint256) {
+    function getTokenAmount(uint256 totalSold) public pure returns (uint256) {
         uint256 y = INITIAL_VIRTUAL_TOKENS - K / (INITIAL_VIRTUAL_ETH + totalSold);
         return y;
+    }
+
+    function getTokenPrice(uint256 totalSold) public pure returns (uint256) {
+        uint256 adjustedSold = totalSold + INITIAL_VIRTUAL_ETH;
+        uint256 price = (adjustedSold * adjustedSold) / (K * 2);
+        return price;
     }
 
     function getTokenETHAmount(uint256 y) public pure returns (uint256) {
@@ -397,22 +388,22 @@ contract BaseFunPlatform is Ownable, ReentrancyGuard {
 
         for (uint256 i = 0; i < tokenList.length; i ++) {
             address tokenAddress = tokenList[i];
+            TokenInfo storage tokenInfo = tokens[tokenAddress];
+
             uint256 balanceToken = Memecoin(tokenAddress).balanceOf(address(this));
             
             if (balanceToken > 0) {
                 Memecoin(tokenAddress).transfer(newPlatform, balanceToken);
             }
-        }
 
-        IBaseFunPlatform(newPlatform).setMigrationVariables(
-            CREATION_FEE,
-            feePercent,
-            creatorReward,
-            baseFunReward,
-            feeAddress,
-            paused,
-            admin
-        );
+            if (tokenInfo.tradingOnUniswap) {
+                address uniswapPair = tokenInfo.uniswapPair;
+                uint256 lpBalance = IERC20(uniswapPair).balanceOf(address(this));
+                if (lpBalance > 0) {
+                    IERC20(uniswapPair).transfer(newPlatform, lpBalance);
+                }
+            }
+        }
     }
 
     function confirmMigration(
@@ -433,38 +424,6 @@ contract BaseFunPlatform is Ownable, ReentrancyGuard {
 
         uint256 nativeBalance = address(this).balance;
         emit MigrationComplete(nativeBalance, tokenAddresses.length);
-    }
-
-    function setMigrationVariables(
-        uint256 _creationFee,
-        uint256 _feePercent,
-        uint256 _creatorReward,
-        uint256 _baseFunReward,
-        address _feeAddress,
-        bool _paused,
-        address[] memory _admin
-    ) external onlyOwner {
-        CREATION_FEE = _creationFee;
-        feePercent = _feePercent;
-        creatorReward = _creatorReward;
-        baseFunReward = _baseFunReward;
-        feeAddress = _feeAddress;
-        paused = _paused;
-
-        delete admin;
-        for (uint256 i = 0; i < _admin.length; i++) {
-            admin.push(_admin[i]);
-        }
-
-        emit MigrationVariablesUpdated(
-            _creationFee,
-            _feePercent,
-            _creatorReward,
-            _baseFunReward,
-            _feeAddress,
-            _paused,
-            _admin
-        );
     }
 
     receive() external payable {}
